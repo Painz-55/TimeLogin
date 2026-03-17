@@ -58,7 +58,6 @@ btnLogin.onclick = () => {
     return;
   }
 
-  // IMPORTANTE: No Firebase Console, cadastre como "usuario@timer.com"
   const internalEmail = `${userField.toLowerCase()}@timer.com`;
 
   signInWithEmailAndPassword(auth, internalEmail, passField)
@@ -72,8 +71,7 @@ btnLogin.onclick = () => {
 };
 
 function checkPermissions(user) {
-  // ATENÇÃO: Se no Firebase você criou como 'role', mude 'cargo' para 'role' abaixo
-  const userRef = ref(db, `users/${user.uid}/cargo`); 
+  const userRef = ref(db, `users/${user.uid}/role`); 
   
   onValue(userRef, (snapshot) => {
     const role = snapshot.val();
@@ -92,11 +90,7 @@ function checkPermissions(user) {
 onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.classList.remove("active");
-    
-    // ESTA É A LINHA QUE VOCÊ ADICIONA:
     checkPermissions(user); 
-    
-    // Suas funções que já existiam:
     loadBosses();
     loadConfig();
   } else {
