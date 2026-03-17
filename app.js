@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 /* =========================
@@ -70,27 +70,42 @@ btnLogin.onclick = () => {
     });
 };
 
+let currentUserIsAdmin = false;
+
 function checkPermissions(user) {
-  const userRef = ref(db, `users/${user.uid}/role`); 
+  const userRef = ref(db, `users/${user.uid}/role`);
   
   onValue(userRef, (snapshot) => {
     const role = snapshot.val();
-    const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
+    currentUserIsAdmin = (role === 'admin');
 
-    if (role === 'admin') {
-      adminElements.forEach(el => el.style.display = 'inline-block');
-      console.log("Admin logado");
-    } else {
-      adminElements.forEach(el => el.style.display = 'none');
-      console.log("Usuário comum");
-    }
+    // Oculta botões de gerenciamento
+    const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
+    adminElements.forEach(el => el.style.display = currentUserIsAdmin ? 'inline-block' : 'none');
+
+    // Oculta botões de Start/Stop de timers existentes
+    const timerButtons = document.querySelectorAll('.timer button');
+    timerButtons.forEach(btn => {
+        btn.style.display = currentUserIsAdmin ? 'block' : 'none';
+    });
+    
+    // Bloqueia a seleção de Boss para não-admins
+    const timerSelects = document.querySelectorAll('.timer select');
+    timerSelects.forEach(sel => {
+        sel.disabled = !currentUserIsAdmin;
+    });
   });
 }
 
+/* =========================
+AUTH & INITIALIZATION
+========================= */
+
 onAuthStateChanged(auth, (user) => {
+  const loginScreen = document.getElementById("loginScreen");
   if (user) {
     loginScreen.classList.remove("active");
-    checkPermissions(user); 
+    checkPermissions(user); // Verifica permissões primeiro
     loadBosses();
     loadConfig();
   } else {
@@ -194,9 +209,11 @@ function createTimers() {
     let bar = document.createElement("div");
     bar.className = "bar";
     progress.appendChild(bar);
-    let btn = document.createElement("button");
-    btn.textContent = "Start";
+    let btn = document.createElement("button")
+    btn.textContent = "Start"
+    btn.style.display = currentUserIsAdmin ? "block" : "none";
     btn.onclick = () => toggleTimer(i);
+    select.disabled = !currentUserIsAdmin;
     div.append(select, label, progress, btn);
     container.appendChild(div);
   });
