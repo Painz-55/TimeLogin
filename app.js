@@ -235,6 +235,11 @@ document.getElementById("removeTimer").onclick = () => {
 };
 
 function toggleTimer(i) {
+  if (!currentUserIsAdmin) {
+    console.warn("Usuário não autorizado tentou iniciar o timer");
+    return;
+  }
+
   stopAlarm();
   let timerDiv = document.querySelectorAll(".timer")[i];
   if (timerDiv) timerDiv.classList.remove("finished");
@@ -242,25 +247,33 @@ function toggleTimer(i) {
 }
 
 function startTimer(i) {
+  if (!currentUserIsAdmin) return;
+
   let bossId = config.timers[i].bossId ?? 0;
   if (!config.bosses[bossId]) return;
   let total = config.bosses[bossId].tempo * 60;
+
   set(ref(db, "timers/" + i), { start: serverTimestamp(), tempo: total });
 }
 
 function stopTimer(i) {
+  if (!currentUserIsAdmin) return;
+
   clearInterval(intervals[i]);
   intervals[i] = null;
   delete activeTimers[i];
   updateBigTimer();
+
   let label = document.querySelectorAll(".timer span")[i];
   let bar = document.querySelectorAll(".bar")[i];
   let btn = document.querySelectorAll(".timer button")[i];
+
   if (label) {
     label.textContent = "00:00";
     bar.style.width = "0%";
     btn.textContent = "Start";
   }
+
   set(ref(db, "timers/" + i), null);
 }
 
