@@ -253,13 +253,21 @@ function toggleTimer(i) {
 }
 
 function startTimer(i) {
-  if (!currentUserIsAdmin) return;
+  if (!currentUserIsAdmin) {
+    console.warn("Tentativa bloqueada (startTimer)");
+    return;
+  }
 
   let bossId = config.timers[i].bossId ?? 0;
   if (!config.bosses[bossId]) return;
+
   let total = config.bosses[bossId].tempo * 60;
 
-  set(ref(db, "timers/" + i), { start: serverTimestamp(), tempo: total });
+  set(ref(db, "timers/" + i), {
+    start: serverTimestamp(),
+    tempo: total,
+    createdBy: auth.currentUser.uid // 🔥 EXTRA SEGURANÇA
+  });
 }
 
 function stopTimer(i) {
