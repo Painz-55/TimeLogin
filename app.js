@@ -150,13 +150,19 @@ function loadBosses(){
 
  onValue(bossRef,(snapshot)=>{
 
-  const data=snapshot.val()
-  if(!data) return
+const data = snapshot.val()
 
-  config.bosses=data
+config.bosses = data || []
 
-  updateBossDropdowns()
-  renderBossConfig()
+if(config.bosses.length === 0){
+  config.bosses.push({
+    nome: "Boss Default",
+    tempo: 60
+  })
+}
+
+updateBossDropdowns()
+renderBossConfig()
 
  })
 
@@ -172,15 +178,18 @@ function loadConfig(){
 
  onValue(configRef,(snapshot)=>{
 
-  const data=snapshot.val()
-  if(!data) return
+const data = snapshot.val()
 
-  config.timers=data
+config.timers = data || []
 
-  intervals.length=config.timers.length
+if(config.timers.length === 0){
+  config.timers.push({ bossId: 0 })
+}
 
-  createTimers()
-  syncTimers()
+intervals.length = config.timers.length
+
+createTimers()
+syncTimers()
 
  })
 
