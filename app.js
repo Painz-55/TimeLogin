@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, onValue, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 /* =========================
 FIREBASE CONFIG
@@ -42,7 +43,7 @@ let activeTimers = {};
 let timerListeners = [];
 
 /* =========================
-AUTH & LOGIN
+AUTH & LOGIN (MODO USUÁRIO)
 ========================= */
 const loginScreen = document.getElementById("loginScreen");
 const btnLogin = document.getElementById("btnLogin");
@@ -57,48 +58,23 @@ btnLogin.onclick = () => {
     return;
   }
 
+  // IMPORTANTE: No Firebase Console, cadastre como "usuario@timer.com"
   const internalEmail = `${userField.toLowerCase()}@timer.com`;
 
   signInWithEmailAndPassword(auth, internalEmail, passField)
-    .then(() => errorMsg.textContent = "")
-    .catch(() => errorMsg.textContent = "Usuário ou senha inválidos.");
+    .then(() => {
+      errorMsg.textContent = "";
+    })
+    .catch((error) => {
+      errorMsg.textContent = "Usuário ou senha inválidos.";
+      console.error("Erro:", error.code);
+    });
 };
 
-let currentUserIsAdmin = false;
-
-/* =========================
-PERMISSÕES (CORRIGIDO)
-========================= */
-async function checkPermissions(user) {
-  const userRef = ref(db, `users/${user.uid}/role`);
-  const snapshot = await get(userRef);
-
-  const role = snapshot.val();
-  currentUserIsAdmin = (role === 'admin');
-
-  const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
-  adminElements.forEach(el => el.style.display = currentUserIsAdmin ? 'inline-block' : 'none');
-
-  const timerButtons = document.querySelectorAll('.timer button');
-  timerButtons.forEach(btn => {
-    btn.style.display = currentUserIsAdmin ? 'block' : 'none';
-  });
-
-  const timerSelects = document.querySelectorAll('.timer select');
-  timerSelects.forEach(sel => {
-    sel.disabled = !currentUserIsAdmin;
-  });
-}
-
-/* =========================
-AUTH INIT
-========================= */
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.classList.remove("active");
-
-    await checkPermissions(user);
-
+    // Só carrega os dados após confirmar que está logado
     loadBosses();
     loadConfig();
   } else {
@@ -107,7 +83,7 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 /* =========================
-BOSSES
+FUNÇÕES DE CARREGAMENTO (BOSSES)
 ========================= */
 function loadBosses() {
   onValue(ref(db, "config/bosses"), (snapshot) => {
@@ -126,21 +102,17 @@ function renderBossConfig() {
   config.bosses.forEach((b, i) => {
     let row = document.createElement("div");
     row.className = "bossRow";
-
     let nome = document.createElement("input");
     nome.value = b.nome;
     nome.onchange = () => { config.bosses[i].nome = nome.value; saveConfig(); updateBossDropdowns(); };
-
     let tempo = document.createElement("input");
     tempo.type = "number";
     tempo.value = b.tempo;
     tempo.style.width = "60px";
     tempo.onchange = () => { config.bosses[i].tempo = parseInt(tempo.value) || 0; saveConfig(); };
-
     let del = document.createElement("button");
     del.textContent = "X";
     del.onclick = (e) => { e.stopPropagation(); config.bosses.splice(i, 1); saveConfig(); renderBossConfig(); updateBossDropdowns(); };
-
     row.append(nome, tempo, del);
     div.appendChild(row);
   });
@@ -167,7 +139,7 @@ document.getElementById("addBoss").onclick = () => {
 };
 
 /* =========================
-TIMERS
+TIMERS CONFIG
 ========================= */
 function loadConfig() {
   onValue(ref(db, "config/timers"), (snapshot) => {
@@ -187,11 +159,9 @@ function saveConfig() { set(ref(db, "config/bosses"), config.bosses); }
 function createTimers() {
   let container = document.getElementById("timers");
   container.innerHTML = "";
-
   config.timers.forEach((t, i) => {
     let div = document.createElement("div");
     div.className = "timer";
-
     let select = document.createElement("select");
     config.bosses.forEach((b, index) => {
       let opt = document.createElement("option");
@@ -199,104 +169,78 @@ function createTimers() {
       opt.textContent = b.nome;
       select.appendChild(opt);
     });
-
     select.value = t.bossId || 0;
     select.onchange = () => { config.timers[i].bossId = parseInt(select.value); saveGlobal(); };
-
     let label = document.createElement("span");
     label.textContent = "00:00";
-
     let progress = document.createElement("div");
     progress.className = "progress";
-
     let bar = document.createElement("div");
     bar.className = "bar";
     progress.appendChild(bar);
-
     let btn = document.createElement("button");
     btn.textContent = "Start";
-    btn.style.display = currentUserIsAdmin ? "block" : "none";
-
-    btn.onclick = () => {
-      if (!currentUserIsAdmin) return;
-      toggleTimer(i);
-    };
-
-    select.disabled = !currentUserIsAdmin;
-
+    btn.onclick = () => toggleTimer(i);
     div.append(select, label, progress, btn);
     container.appendChild(div);
   });
 }
 
-/* =========================
-AÇÕES TIMER (CORRIGIDO)
-========================= */
+document.getElementById("addTimer").onclick = () => {
+  if (config.timers.length >= 8) return;
+  config.timers.push({ bossId: 0 });
+  saveGlobal();
+};
+
+document.getElementById("removeTimer").onclick = () => {
+  if (config.timers.length <= 1) return;
+  let index = config.timers.length - 1;
+  stopTimer(index);
+  set(ref(db, "timers/" + index), null);
+  config.timers.pop();
+  saveGlobal();
+};
+
 function toggleTimer(i) {
-  if (!currentUserIsAdmin) {
-    console.warn("Sem permissão");
-    return;
-  }
-
   stopAlarm();
-
   let timerDiv = document.querySelectorAll(".timer")[i];
   if (timerDiv) timerDiv.classList.remove("finished");
-
-  if (intervals[i]) stopTimer(i);
-  else startTimer(i);
+  if (intervals[i]) stopTimer(i); else startTimer(i);
 }
 
 function startTimer(i) {
-  if (!currentUserIsAdmin) return;
-
   let bossId = config.timers[i].bossId ?? 0;
   if (!config.bosses[bossId]) return;
-
   let total = config.bosses[bossId].tempo * 60;
-
-  set(ref(db, "timers/" + i), {
-    start: serverTimestamp(),
-    tempo: total,
-    createdBy: auth.currentUser.uid
-  });
+  set(ref(db, "timers/" + i), { start: serverTimestamp(), tempo: total });
 }
 
 function stopTimer(i) {
-  if (!currentUserIsAdmin) return;
-
   clearInterval(intervals[i]);
   intervals[i] = null;
   delete activeTimers[i];
   updateBigTimer();
-
   let label = document.querySelectorAll(".timer span")[i];
   let bar = document.querySelectorAll(".bar")[i];
   let btn = document.querySelectorAll(".timer button")[i];
-
   if (label) {
     label.textContent = "00:00";
     bar.style.width = "0%";
     btn.textContent = "Start";
   }
-
   set(ref(db, "timers/" + i), null);
 }
 
 function syncTimers() {
   timerListeners.forEach(unsub => { if (unsub) unsub(); });
   timerListeners = [];
-
   config.timers.forEach((t, i) => {
     const unsubscribe = onValue(ref(db, "timers/" + i), (snapshot) => {
       const data = snapshot.val();
-
       const label = document.querySelectorAll(".timer span")[i];
       const bar = document.querySelectorAll(".bar")[i];
       const btn = document.querySelectorAll(".timer button")[i];
-
-      if (!label) return;
-
+      if (!label || !bar || !btn) return;
       if (data === null) {
         clearInterval(intervals[i]);
         intervals[i] = null;
@@ -307,10 +251,8 @@ function syncTimers() {
         btn.textContent = "Start";
         return;
       }
-
       runTimer(i, data);
     });
-
     timerListeners.push(unsubscribe);
   });
 }
@@ -319,27 +261,21 @@ function runTimer(i, data) {
   let label = document.querySelectorAll(".timer span")[i];
   let bar = document.querySelectorAll(".bar")[i];
   let btn = document.querySelectorAll(".timer button")[i];
-
   let total = data.tempo;
-
   clearInterval(intervals[i]);
-
   intervals[i] = setInterval(() => {
     let elapsed = (serverNow() - data.start) / 1000;
     let remaining = Math.floor(total - elapsed);
     if (remaining < 0) remaining = 0;
-
     let m = Math.floor(remaining/60);
     let s = remaining % 60;
-
     label.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
     bar.style.width = ((total - remaining) / total * 100) + "%";
     btn.textContent = "Stop";
-
-    activeTimers[i] = { remaining, label: config.bosses[config.timers[i].bossId].nome };
+    activeTimers[i] = { remaining: remaining, label: config.bosses[config.timers[i].bossId].nome };
     updateBigTimer();
-
     if (remaining <= 0) {
+      remaining = 0;
       label.textContent = "00:00";
       triggerTimerFinished(i);
     }
@@ -355,47 +291,33 @@ function triggerTimerFinished(i) {
 
 function updateBigTimer() {
   let keys = Object.keys(activeTimers);
-
   if (keys.length === 0) {
     document.getElementById("bigTimer").textContent = "00:00";
     document.getElementById("bigLabel").textContent = "No Timer Running";
     return;
   }
-
-  let lowest = null, index = null;
-
+  let lowest = null; let index = null;
   keys.forEach(k => {
     if (lowest === null || activeTimers[k].remaining < lowest) {
       lowest = activeTimers[k].remaining;
       index = k;
     }
   });
-
   let remaining = activeTimers[index].remaining;
   let m = Math.floor(remaining / 60);
   let s = remaining % 60;
-
-  document.getElementById("bigTimer").textContent =
-    String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-
-  document.getElementById("bigLabel").textContent =
-    activeTimers[index].label;
+  document.getElementById("bigTimer").textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  document.getElementById("bigLabel").textContent = activeTimers[index].label;
 }
 
 function playAlarm() {
   let audio = document.getElementById("alarmSound");
-  if (audio) {
-    audio.currentTime = 0;
-    audio.play();
-  }
+  if (audio) { audio.currentTime = 0; audio.play(); }
 }
 
 function stopAlarm() {
   let audio = document.getElementById("alarmSound");
-  if (audio) {
-    audio.pause();
-    audio.currentTime = 0;
-  }
+  if (audio) { audio.pause(); audio.currentTime = 0; }
 }
 
 /* =========================
