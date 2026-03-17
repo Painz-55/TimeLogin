@@ -10,7 +10,6 @@ FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyBtPHeua_gIhCpnGcP6SguY1ZiQQ6YuGfQ",
   authDomain: "timetrackerlogin-632a2.firebaseapp.com",
-  // Adicione a linha abaixo (confirme se o ID do projeto está correto)
   databaseURL: "https://timetrackerlogin-632a2-default-rtdb.firebaseio.com", 
   projectId: "timetrackerlogin-632a2",
   storageBucket: "timetrackerlogin-632a2.firebasestorage.app",
