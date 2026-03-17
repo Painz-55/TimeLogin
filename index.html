@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+<title>TimerTracker Dashboard</title>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="dashboard">
+
+<!-- LEFT PANEL -->
+
+<div class="leftPanel">
+
+<button id="exitObs" class="hidden">Exit OBS</button>
+
+<div class="mainTimer">
+
+<div id="bigTimer">00:00</div>
+<div id="bigLabel">No Timer Running</div>
+
+</div>
+
+</div>
+
+
+<!-- RIGHT PANEL -->
+
+<div class="rightPanel">
+
+<div class="header">
+
+<h1>Boss Timers</h1>
+
+<div>
+
+<button id="addTimer">+</button>
+<button id="removeTimer">-</button>
+
+<button id="obsBtn">OBS</button>
+<button id="configBtn">⚙</button>
+
+</div>
+
+</div>
+
+<div id="timers"></div>
+
+</div>
+
+</div>
+
+
+<!-- CONFIG PANEL -->
+
+<div id="configPanel" class="hidden">
+
+<button id="closeConfig">✖</button>
+
+<h2>Configurações</h2>
+
+<div id="bossConfig"></div>
+
+<button id="addBoss">Add Boss</button>
+
+<br><br>
+
+<button id="saveConfig">Salvar</button>
+
+</div>
+
+<script type="module" src="app.js"></script>
+  
+<audio id="alarmSound" src="alarm.mp3" preload="auto"></audio>
+  
+</body>
+</html>
