@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 /* =========================
 FIREBASE CONFIG
@@ -73,39 +72,42 @@ btnLogin.onclick = () => {
 let currentUserIsAdmin = false;
 
 function checkPermissions(user) {
-  const userRef = ref(db, `users/${user.uid}/role`);
-  
-  onValue(userRef, (snapshot) => {
-    const role = snapshot.val();
-    currentUserIsAdmin = (role === 'admin');
+  return new Promise((resolve) => {
+    const userRef = ref(db, `users/${user.uid}/role`);
 
-    // Oculta botões de gerenciamento
-    const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
-    adminElements.forEach(el => el.style.display = currentUserIsAdmin ? 'inline-block' : 'none');
+    onValue(userRef, (snapshot) => {
+      const role = snapshot.val();
+      currentUserIsAdmin = (role === 'admin');
 
-    // Oculta botões de Start/Stop de timers existentes
-    const timerButtons = document.querySelectorAll('.timer button');
-    timerButtons.forEach(btn => {
+      const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
+      adminElements.forEach(el => el.style.display = currentUserIsAdmin ? 'inline-block' : 'none');
+
+      const timerButtons = document.querySelectorAll('.timer button');
+      timerButtons.forEach(btn => {
         btn.style.display = currentUserIsAdmin ? 'block' : 'none';
-    });
-    
-    // Bloqueia a seleção de Boss para não-admins
-    const timerSelects = document.querySelectorAll('.timer select');
-    timerSelects.forEach(sel => {
+      });
+
+      const timerSelects = document.querySelectorAll('.timer select');
+      timerSelects.forEach(sel => {
         sel.disabled = !currentUserIsAdmin;
-    });
+      });
+
+      resolve(); // 🔥 IMPORTANTE
+    }, { onlyOnce: true });
   });
 }
+
 
 /* =========================
 AUTH & INITIALIZATION
 ========================= */
 
-onAuthStateChanged(auth, (user) => {
-  const loginScreen = document.getElementById("loginScreen");
+onAuthStateChanged(auth, async (user) => {
   if (user) {
     loginScreen.classList.remove("active");
-    checkPermissions(user); // Verifica permissões primeiro
+
+    await checkPermissions(user); // 🔥 AGUARDA PERMISSÃO
+
     loadBosses();
     loadConfig();
   } else {
@@ -241,7 +243,7 @@ document.getElementById("removeTimer").onclick = () => {
 };
 
 function toggleTimer(i) {
-  if (!currentUserIsAdmin) {
+  if (!currentUserIsAdmin) then return; {
     console.warn("Usuário não autorizado tentou iniciar o timer");
     return;
   }
