@@ -212,7 +212,13 @@ function createTimers() {
     let btn = document.createElement("button")
     btn.textContent = "Start"
     btn.style.display = currentUserIsAdmin ? "block" : "none";
-    btn.onclick = () => toggleTimer(i);
+    btn.onclick = () => {
+        if (!currentUserIsAdmin) {
+            console.warn("Bloqueado: usuário não é admin");
+        return;
+    }
+  toggleTimer(i);
+};
     select.disabled = !currentUserIsAdmin;
     div.append(select, label, progress, btn);
     container.appendChild(div);
