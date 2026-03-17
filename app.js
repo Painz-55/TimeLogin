@@ -1,24 +1,27 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
 
 /* =========================
 FIREBASE
 ========================= */
 
 const firebaseConfig = {
-
- apiKey: "AIzaSyAdCJ_Ux1YrjQdxSgutu_SvqTQTNIDVLUs",
- authDomain: "timertracker-77df3.firebaseapp.com",
- databaseURL: "https://timertracker-77df3-default-rtdb.firebaseio.com",
- projectId: "timertracker-77df3",
- storageBucket: "timertracker-77df3.firebasestorage.app",
- messagingSenderId: "1071640359296",
- appId: "1:1071640359296:web:c02cd908aca9a8547d1165"
-
+  apiKey: "AIzaSyBtPHeua_gIhCpnGcP6SguY1ZiQQ6YuGfQ",
+  authDomain: "timetrackerlogin-632a2.firebaseapp.com",
+  // Adicione a linha abaixo (confirme se o ID do projeto está correto)
+  databaseURL: "https://timetrackerlogin-632a2-default-rtdb.firebaseio.com", 
+  projectId: "timetrackerlogin-632a2",
+  storageBucket: "timetrackerlogin-632a2.firebasestorage.app",
+  messagingSenderId: "130743498609",
+  appId: "1:130743498609:web:2e3e8a9e30ac909d7fa8d0",
+  measurementId: "G-TXHCMSRBN7"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app); // Inicializa o Auth
 
 /* =========================
 SERVER TIME SYNC
@@ -610,8 +613,43 @@ document.addEventListener("click",(e)=>{
 })
 
 /* =========================
-INIT
+AUTH & LOGIN (MODO USUÁRIO)
 ========================= */
 
-loadBosses()
-loadConfig()
+const loginScreen = document.getElementById("loginScreen");
+const btnLogin = document.getElementById("btnLogin");
+
+btnLogin.onclick = () => {
+  const userField = document.getElementById("loginUser").value.trim();
+  const passField = document.getElementById("loginPassword").value;
+  const errorMsg = document.getElementById("loginError");
+
+  if (!userField || !passField) {
+    errorMsg.textContent = "Preencha todos os campos.";
+    return;
+  }
+
+  // Transformamos "admin" em "admin@timer.com" apenas para o Firebase
+  const internalEmail = `${userField.toLowerCase()}@timer.com`;
+
+  signInWithEmailAndPassword(auth, internalEmail, passField)
+    .then(() => {
+       errorMsg.textContent = "";
+       // O onAuthStateChanged cuidará do resto
+    })
+    .catch((error) => {
+      errorMsg.textContent = "Usuário ou senha inválidos.";
+      console.error("Erro de login:", error.code);
+    });
+};
+
+// Mantenha o observador para liberar o app
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    loginScreen.classList.remove("active");
+    loadBosses();
+    loadConfig();
+  } else {
+    loginScreen.classList.add("active");
+  }
+});
