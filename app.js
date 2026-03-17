@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 /* =========================
 FIREBASE CONFIG
@@ -70,10 +71,32 @@ btnLogin.onclick = () => {
     });
 };
 
+function checkPermissions(user) {
+  // ATENÇÃO: Se no Firebase você criou como 'role', mude 'cargo' para 'role' abaixo
+  const userRef = ref(db, `users/${user.uid}/cargo`); 
+  
+  onValue(userRef, (snapshot) => {
+    const role = snapshot.val();
+    const adminElements = document.querySelectorAll('#addTimer, #removeTimer, #configBtn, #addBoss');
+
+    if (role === 'admin') {
+      adminElements.forEach(el => el.style.display = 'inline-block');
+      console.log("Admin logado");
+    } else {
+      adminElements.forEach(el => el.style.display = 'none');
+      console.log("Usuário comum");
+    }
+  });
+}
+
 onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.classList.remove("active");
-    // Só carrega os dados após confirmar que está logado
+    
+    // ESTA É A LINHA QUE VOCÊ ADICIONA:
+    checkPermissions(user); 
+    
+    // Suas funções que já existiam:
     loadBosses();
     loadConfig();
   } else {
