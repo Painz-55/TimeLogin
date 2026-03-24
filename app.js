@@ -248,31 +248,51 @@ function createTimers(){
 
   progress.appendChild(bar)
 
-  // =========================
-  // 🔔 BOTÃO DE ALARME (LOCAL)
-  // =========================
+// =========================
+// 🔔 BOTÃO DE ALARME (LOCAL)
+// =========================
 
-  let alarmBtn = document.createElement("button")
+let alarmBtn = document.createElement("button")
 
-const storageKey = "alarmEnabled_boss_" + (t.bossId ?? 0)
+// 🔥 usa bossId (mais seguro)
+const bossId = t.bossId ?? 0
+const storageKey = "alarmEnabled_boss_" + bossId
 
-  let enabled = localStorage.getItem(storageKey) !== "false"
+let enabled = true
 
-  function updateIcon(){
-    alarmBtn.textContent = enabled ? "🔔" : "🔕"
-    alarmBtn.style.opacity = enabled ? "1" : "0.5"
-  }
+// protege contra erro de localStorage
+try {
+  enabled = localStorage.getItem(storageKey) !== "false"
+} catch(e) {
+  console.warn("localStorage bloqueado")
+}
+
+function updateIcon(){
+  alarmBtn.textContent = enabled ? "🔔" : "🔕"
+  alarmBtn.style.opacity = enabled ? "1" : "0.4"
+}
+
+updateIcon()
+
+alarmBtn.onclick = () => {
+  enabled = !enabled
+
+  try {
+    localStorage.setItem(storageKey, enabled)
+  } catch(e){}
 
   updateIcon()
+}
 
-  alarmBtn.onclick = () => {
-    enabled = !enabled
-    localStorage.setItem(storageKey, enabled)
-    updateIcon()
-  }
+// 🔥 garante que apareça
+alarmBtn.style.minWidth = "40px"
+alarmBtn.style.display = "inline-block"
+alarmBtn.style.textAlign = "center"
+alarmBtn.style.padding = "6px 10px"
+alarmBtn.style.fontSize = "16px"
 
-  alarmBtn.style.padding = "6px 10px"
-  alarmBtn.style.fontSize = "16px"
+// tooltip
+alarmBtn.title = "Ativar/Desativar Alarme"
 
   // =========================
   // BOTÃO START/STOP
