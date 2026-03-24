@@ -254,7 +254,7 @@ function createTimers(){
 
   let alarmBtn = document.createElement("button")
 
-  const storageKey = "alarmEnabled_" + i
+const storageKey = "alarmEnabled_boss_" + (t.bossId ?? 0)
 
   let enabled = localStorage.getItem(storageKey) !== "false"
 
@@ -519,7 +519,8 @@ function triggerTimerFinished(i){
  // 🔔 VERIFICA SE ALARME ESTÁ ATIVO (LOCAL)
  // =========================
 
- const storageKey = "alarmEnabled_" + i
+const bossId = config.timers[i]?.bossId ?? 0
+const storageKey = "alarmEnabled_boss_" + bossId
  const enabled = localStorage.getItem(storageKey) !== "false"
 
  if(enabled){
