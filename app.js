@@ -237,7 +237,8 @@ function createTimers(){
    saveGlobal()
   }
 
-  let label=document.createElement("span")
+let label=document.createElement("span")
+label.className = "timeLabel"
   label.textContent="00:00"
 
   let progress=document.createElement("div")
@@ -394,9 +395,9 @@ function stopTimer(i){
 
  updateBigTimer()
 
- let label=document.querySelectorAll(".timer span")[i]
- let bar=document.querySelectorAll(".bar")[i]
- let btn=document.querySelectorAll(".timer .startBtn")[i]
+ let label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
+ let bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
+ let btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
 
  if(label){
 
@@ -430,9 +431,9 @@ function syncTimers(){
 
    const data = snapshot.val()
 
-   const label=document.querySelectorAll(".timer span")[i]
-   const bar=document.querySelectorAll(".bar")[i]
-   const btn=document.querySelectorAll(".timer .startBtn")[i]
+   const label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
+   const bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
+   const btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
 
    if(!label || !bar || !btn) return
 
@@ -467,9 +468,9 @@ RUN TIMER
 
 function runTimer(i,data){
 
- let label=document.querySelectorAll(".timer span")[i]
- let bar=document.querySelectorAll(".bar")[i]
- let btn=document.querySelectorAll(".timer .startBtn")[i]
+ let label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
+ let bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
+ let btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
 
  let total=data.tempo
 
