@@ -294,7 +294,7 @@ alarmBtn.title = "Ativar/Desativar Alarme"
 
   let btn=document.createElement("button")
     btn.className = "startBtn"
-  btn.textContent="Start"
+  btn.textContent = "🔥"
 
   btn.onclick=()=>toggleTimer(i)
 
@@ -403,7 +403,7 @@ function stopTimer(i){
 
   label.textContent="00:00"
   bar.style.width="0%"
-  btn.textContent="Start"
+  btn.textContent = "🔥"
 
  }
 
@@ -447,7 +447,7 @@ function syncTimers(){
 
     label.textContent="00:00"
     bar.style.width="0%"
-    btn.textContent="Start"
+    btn.textContent = "🔥"
 
     return
    }
