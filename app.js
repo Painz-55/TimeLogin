@@ -254,22 +254,14 @@ function createTimers(){
 
 let alarmBtn = document.createElement("button")
 
-// 🔥 proteção total contra undefined
-let bossId = 0
-
-if(config.timers[i] && typeof config.timers[i].bossId !== "undefined"){
-  bossId = config.timers[i].bossId
-}
-
+let bossId = t?.bossId ?? 0
 const storageKey = "alarmEnabled_boss_" + bossId
 
 let enabled = true
 
 try {
   enabled = localStorage.getItem(storageKey) !== "false"
-} catch(e) {
-  console.warn("localStorage bloqueado")
-}
+} catch(e) {}
 
 function updateIcon(){
   alarmBtn.textContent = enabled ? "🔔" : "🔕"
@@ -280,15 +272,13 @@ updateIcon()
 
 alarmBtn.onclick = () => {
   enabled = !enabled
-
   try {
     localStorage.setItem(storageKey, enabled)
   } catch(e){}
-
   updateIcon()
 }
 
-// 🔥 força aparecer visualmente
+// garante visibilidade
 alarmBtn.style.minWidth = "40px"
 alarmBtn.style.display = "inline-block"
 alarmBtn.style.textAlign = "center"
@@ -302,6 +292,7 @@ alarmBtn.title = "Ativar/Desativar Alarme"
   // =========================
 
   let btn=document.createElement("button")
+    btn.className = "startBtn"
   btn.textContent="Start"
 
   btn.onclick=()=>toggleTimer(i)
@@ -405,7 +396,7 @@ function stopTimer(i){
 
  let label=document.querySelectorAll(".timer span")[i]
  let bar=document.querySelectorAll(".bar")[i]
- let btn=document.querySelectorAll(".timer button")[i]
+ let btn=document.querySelectorAll(".timer .startBtn")[i]
 
  if(label){
 
@@ -441,7 +432,7 @@ function syncTimers(){
 
    const label=document.querySelectorAll(".timer span")[i]
    const bar=document.querySelectorAll(".bar")[i]
-   const btn=document.querySelectorAll(".timer button")[i]
+   const btn=document.querySelectorAll(".timer .startBtn")[i]
 
    if(!label || !bar || !btn) return
 
@@ -478,7 +469,7 @@ function runTimer(i,data){
 
  let label=document.querySelectorAll(".timer span")[i]
  let bar=document.querySelectorAll(".bar")[i]
- let btn=document.querySelectorAll(".timer button")[i]
+ let btn=document.querySelectorAll(".timer .startBtn")[i]
 
  let total=data.tempo
 
