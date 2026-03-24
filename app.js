@@ -254,13 +254,17 @@ function createTimers(){
 
 let alarmBtn = document.createElement("button")
 
-// 🔥 usa bossId (mais seguro)
-const bossId = t.bossId ?? 0
+// 🔥 proteção total contra undefined
+let bossId = 0
+
+if(config.timers[i] && typeof config.timers[i].bossId !== "undefined"){
+  bossId = config.timers[i].bossId
+}
+
 const storageKey = "alarmEnabled_boss_" + bossId
 
 let enabled = true
 
-// protege contra erro de localStorage
 try {
   enabled = localStorage.getItem(storageKey) !== "false"
 } catch(e) {
@@ -284,14 +288,13 @@ alarmBtn.onclick = () => {
   updateIcon()
 }
 
-// 🔥 garante que apareça
+// 🔥 força aparecer visualmente
 alarmBtn.style.minWidth = "40px"
 alarmBtn.style.display = "inline-block"
 alarmBtn.style.textAlign = "center"
 alarmBtn.style.padding = "6px 10px"
 alarmBtn.style.fontSize = "16px"
 
-// tooltip
 alarmBtn.title = "Ativar/Desativar Alarme"
 
   // =========================
