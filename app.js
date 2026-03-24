@@ -265,7 +265,7 @@ try {
 } catch(e) {}
 
 function updateIcon(){
-  alarmBtn.textContent = enabled ? "🔔" : "🔕"
+  alarmBtn.textContent = enabled ? "ON" : "OFF"
   alarmBtn.style.opacity = enabled ? "1" : "0.4"
 }
 
