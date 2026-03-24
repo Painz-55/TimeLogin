@@ -265,7 +265,7 @@ try {
 } catch(e) {}
 
 function updateIcon(){
-  alarmBtn.textContent = enabled ? "ON" : "OFF"
+  alarmBtn.innerHTML = enabled ? "🔔" : "🔕"
   alarmBtn.style.opacity = enabled ? "1" : "0.4"
 }
 
@@ -294,7 +294,7 @@ alarmBtn.title = "Ativar/Desativar Alarme"
 
   let btn=document.createElement("button")
     btn.className = "startBtn"
-  btn.textContent = "🔥"
+  btn.textContent="Start"
 
   btn.onclick=()=>toggleTimer(i)
 
@@ -403,7 +403,7 @@ function stopTimer(i){
 
   label.textContent="00:00"
   bar.style.width="0%"
-  btn.textContent = "🔥"
+  btn.textContent="Start"
 
  }
 
@@ -447,7 +447,7 @@ function syncTimers(){
 
     label.textContent="00:00"
     bar.style.width="0%"
-    btn.textContent = "🔥"
+    btn.textContent="Start"
 
     return
    }
