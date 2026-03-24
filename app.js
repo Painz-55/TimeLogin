@@ -224,12 +224,10 @@ function createTimers(){
   let select=document.createElement("select")
 
   config.bosses.forEach((b,index)=>{
-
    let opt=document.createElement("option")
    opt.value=index
    opt.textContent=b.nome
    select.appendChild(opt)
-
   })
 
   select.value=t.bossId || 0
@@ -250,18 +248,50 @@ function createTimers(){
 
   progress.appendChild(bar)
 
+  // =========================
+  // 🔔 BOTÃO DE ALARME (LOCAL)
+  // =========================
+
+  let alarmBtn = document.createElement("button")
+
+  const storageKey = "alarmEnabled_" + i
+
+  let enabled = localStorage.getItem(storageKey) !== "false"
+
+  function updateIcon(){
+    alarmBtn.textContent = enabled ? "🔔" : "🔕"
+    alarmBtn.style.opacity = enabled ? "1" : "0.5"
+  }
+
+  updateIcon()
+
+  alarmBtn.onclick = () => {
+    enabled = !enabled
+    localStorage.setItem(storageKey, enabled)
+    updateIcon()
+  }
+
+  alarmBtn.style.padding = "6px 10px"
+  alarmBtn.style.fontSize = "16px"
+
+  // =========================
+  // BOTÃO START/STOP
+  // =========================
+
   let btn=document.createElement("button")
   btn.textContent="Start"
 
   btn.onclick=()=>toggleTimer(i)
 
-  div.append(select,label,progress,btn)
+  div.append(select,label,progress,alarmBtn,btn)
 
   container.appendChild(div)
 
  })
 
 }
+
+
 
 /* =========================
 ADD TIMER
@@ -485,7 +515,16 @@ function triggerTimerFinished(i){
   timerDiv.classList.add("finished")
  }
 
- playAlarm()
+ // =========================
+ // 🔔 VERIFICA SE ALARME ESTÁ ATIVO (LOCAL)
+ // =========================
+
+ const storageKey = "alarmEnabled_" + i
+ const enabled = localStorage.getItem(storageKey) !== "false"
+
+ if(enabled){
+  playAlarm()
+ }
 
 }
 
