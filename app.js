@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, set, onValue, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 
@@ -644,6 +644,116 @@ exitObs.onclick = ()=>{
 }
 
 /* =========================
+ADMIN USERS PANEL
+========================= */
+
+const adminUsersBtn = document.getElementById("adminUsersBtn");
+const adminUsersPanel = document.getElementById("adminUsersPanel");
+const closeAdminUsers = document.getElementById("closeAdminUsers");
+const adminUsersList = document.getElementById("adminUsersList");
+
+let currentUsername = null;
+let onlineUsersUnsubscribe = null;
+
+function isAdminUser(user){
+  if (!user?.email) return false;
+  return user.email.toLowerCase() === "admin@timer.com";
+}
+
+function openAdminUsersPanel(){
+  adminUsersPanel.classList.remove("hidden");
+}
+
+function closeAdminUsersPanel(){
+  adminUsersPanel.classList.add("hidden");
+}
+
+adminUsersBtn.onclick = (e) => {
+  e.stopPropagation();
+  openAdminUsersPanel();
+};
+
+closeAdminUsers.onclick = (e) => {
+  e.stopPropagation();
+  closeAdminUsersPanel();
+};
+
+document.addEventListener("click", (e) => {
+  if (adminUsersPanel.classList.contains("hidden")) return;
+
+  if (!adminUsersPanel.contains(e.target) && !adminUsersBtn.contains(e.target)) {
+    closeAdminUsersPanel();
+  }
+});
+
+function renderOnlineUsers(usersObj){
+  adminUsersList.innerHTML = "";
+
+  if (!usersObj) {
+    adminUsersList.innerHTML = "<div>Nenhum usuário logado.</div>";
+    return;
+  }
+
+  const entries = Object.entries(usersObj);
+
+  if (entries.length === 0) {
+    adminUsersList.innerHTML = "<div>Nenhum usuário logado.</div>";
+    return;
+  }
+
+  entries.forEach(([username, data]) => {
+    const row = document.createElement("div");
+    row.className = "admin-user-row";
+
+    const name = document.createElement("div");
+    name.className = "admin-user-name";
+    name.textContent = data?.username || username;
+
+    const status = document.createElement("div");
+    status.className = "admin-user-status";
+    status.textContent = "Online";
+
+    row.append(name, status);
+    adminUsersList.appendChild(row);
+  });
+}
+
+function watchOnlineUsers(){
+  const usersRef = ref(db, "onlineUsers");
+
+  if (onlineUsersUnsubscribe) {
+    onlineUsersUnsubscribe();
+  }
+
+  onlineUsersUnsubscribe = onValue(usersRef, (snapshot) => {
+    renderOnlineUsers(snapshot.val());
+  });
+}
+
+function markUserOnline(user){
+  if (!user?.email) return;
+
+  const username = user.email.split("@")[0];
+  currentUsername = username;
+
+  const userRef = ref(db, "onlineUsers/" + username);
+
+  set(userRef, {
+    username,
+    email: user.email,
+    loginAt: serverTimestamp()
+  });
+
+  onDisconnect(userRef).remove();
+}
+
+function markUserOffline(){
+  if (!currentUsername) return;
+  set(ref(db, "onlineUsers/" + currentUsername), null);
+  currentUsername = null;
+}
+
+/* =========================
 CONFIG PANEL
 ========================= */
 
@@ -713,7 +823,21 @@ onAuthStateChanged(auth, (user) => {
     loginScreen.classList.remove("active");
     loadBosses();
     loadConfig();
+
+    markUserOnline(user);
+
+    if (isAdminUser(user)) {
+      adminUsersBtn.classList.remove("hidden");
+      watchOnlineUsers();
+    } else {
+      adminUsersBtn.classList.add("hidden");
+      closeAdminUsersPanel();
+    }
+
   } else {
     loginScreen.classList.add("active");
+    adminUsersBtn.classList.add("hidden");
+    closeAdminUsersPanel();
+    markUserOffline();
   }
 });

@@ -33,6 +33,7 @@
                     <button id="addTimer">+</button>
                     <button id="removeTimer">-</button>
                     <button id="obsBtn">OBS</button>
+                    <button id="adminUsersBtn" class="hidden">Onlines</button>
                     <button id="configBtn">⚙</button>
                 </div>
             </div>
@@ -51,5 +52,10 @@
 
     <script type="module" src="app.js"></script>
     <audio id="alarmSound" src="alarm.mp3" preload="auto"></audio>
+    <div id="adminUsersPanel" class="hidden admin-panel">
+        <button id="closeAdminUsers">✖</button>
+        <h2>Usuários logados</h2>
+        <div id="adminUsersList"></div>
+    </div>
 </body>
 </html>
