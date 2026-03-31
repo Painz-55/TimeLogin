@@ -10,8 +10,7 @@ FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyBtPHeua_gIhCpnGcP6SguY1ZiQQ6YuGfQ",
   authDomain: "timetrackerlogin-632a2.firebaseapp.com",
-  // Adicione a linha abaixo (confirme se o ID do projeto está correto)
-  databaseURL: "https://timetrackerlogin-632a2-default-rtdb.firebaseio.com", 
+  databaseURL: "https://timetrackerlogin-632a2-default-rtdb.firebaseio.com",
   projectId: "timetrackerlogin-632a2",
   storageBucket: "timetrackerlogin-632a2.firebasestorage.app",
   messagingSenderId: "130743498609",
@@ -21,627 +20,548 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const auth = getAuth(app); // Inicializa o Auth
+const auth = getAuth(app);
 
 /* =========================
 SERVER TIME SYNC
 ========================= */
 
-let serverOffset = 0
+let serverOffset = 0;
 
-const offsetRef = ref(db,".info/serverTimeOffset")
+const offsetRef = ref(db, ".info/serverTimeOffset");
 
-onValue(offsetRef,(snap)=>{
- serverOffset = snap.val() || 0
-})
+onValue(offsetRef, (snap) => {
+  serverOffset = snap.val() || 0;
+});
 
-function serverNow(){
- return Date.now() + serverOffset
+function serverNow() {
+  return Date.now() + serverOffset;
 }
 
 /* =========================
 DATA
 ========================= */
 
-let config={
- timers:[],
- bosses:[]
-}
+let config = {
+  timers: [],
+  bosses: []
+};
 
-let intervals=[]
-let activeTimers={}
-let timerListeners=[]
+let intervals = [];
+let activeTimers = {};
+let timerListeners = [];
 
 /* =========================
 LOAD BOSSES
 ========================= */
 
-function renderBossConfig(){
+function renderBossConfig() {
+  let div = document.getElementById("bossConfig");
+  div.innerHTML = "";
 
- let div=document.getElementById("bossConfig")
- div.innerHTML=""
+  config.bosses.forEach((b, i) => {
+    let row = document.createElement("div");
+    row.className = "bossRow";
 
- config.bosses.forEach((b,i)=>{
+    let nome = document.createElement("input");
+    nome.value = b.nome;
 
-  let row=document.createElement("div")
-  row.className="bossRow"
+    nome.onchange = () => {
+      config.bosses[i].nome = nome.value;
+      saveConfig();
+      updateBossDropdowns();
+    };
 
-  let nome=document.createElement("input")
-  nome.value=b.nome
+    let tempo = document.createElement("input");
+    tempo.type = "number";
+    tempo.value = b.tempo;
+    tempo.style.width = "60px";
 
-  nome.onchange=()=>{
-   config.bosses[i].nome=nome.value
-   saveConfig()
-   updateBossDropdowns()
-  }
+    tempo.onchange = () => {
+      config.bosses[i].tempo = parseInt(tempo.value) || 0;
+      saveConfig();
+    };
 
-  let tempo=document.createElement("input")
-  tempo.type="number"
-  tempo.value=b.tempo
-  tempo.style.width="60px"
+    let del = document.createElement("button");
+    del.textContent = "X";
 
-  tempo.onchange=()=>{
-  config.bosses[i].tempo=parseInt(tempo.value)||0
-  saveConfig()
-  }
+    del.onclick = (e) => {
+      e.stopPropagation();
 
-  let del=document.createElement("button")
-  del.textContent="X"
+      config.bosses.splice(i, 1);
 
-  del.onclick=(e)=>{
-   e.stopPropagation()
+      saveConfig();
+      renderBossConfig();
+      updateBossDropdowns();
+    };
 
-   config.bosses.splice(i,1)
+    row.append(nome, tempo, del);
 
-   saveConfig()
-   renderBossConfig()
-   updateBossDropdowns()
-  }
-
-  row.append(nome,tempo,del)
-
-  div.appendChild(row)
-
- })
-
+    div.appendChild(row);
+  });
 }
 
-function updateBossDropdowns(){
+function updateBossDropdowns() {
+  const selects = document.querySelectorAll(".timer select");
 
- const selects=document.querySelectorAll(".timer select")
+  selects.forEach((select, i) => {
+    const current = config.timers[i]?.bossId ?? 0;
 
- selects.forEach((select,i)=>{
+    select.innerHTML = "";
 
-  const current=config.timers[i]?.bossId ?? 0
+    config.bosses.forEach((b, index) => {
+      let opt = document.createElement("option");
+      opt.value = index;
+      opt.textContent = b.nome;
 
-  select.innerHTML=""
+      select.appendChild(opt);
+    });
 
-  config.bosses.forEach((b,index)=>{
-
-   let opt=document.createElement("option")
-   opt.value=index
-   opt.textContent=b.nome
-
-   select.appendChild(opt)
-
-  })
-
-  select.value=current
-
- })
-
+    select.value = current;
+  });
 }
 
-
-document.getElementById("addBoss").onclick=()=>{
-
- config.bosses.push({
-  nome:"New Boss",
-  tempo:60
- })
-
- saveConfig()
-
-}
-
-function loadBosses(){
-
- const bossRef=ref(db,"config/bosses")
-
- onValue(bossRef,(snapshot)=>{
-
-const data = snapshot.val()
-
-config.bosses = data || []
-
-if(config.bosses.length === 0){
+document.getElementById("addBoss").onclick = () => {
   config.bosses.push({
-    nome: "Boss Default",
+    nome: "New Boss",
     tempo: 60
-  })
-}
+  });
 
-updateBossDropdowns()
-renderBossConfig()
+  saveConfig();
+};
 
- })
+function loadBosses() {
+  const bossRef = ref(db, "config/bosses");
 
+  onValue(bossRef, (snapshot) => {
+    const data = snapshot.val();
+
+    config.bosses = data || [];
+
+    if (config.bosses.length === 0) {
+      config.bosses.push({
+        nome: "Boss Default",
+        tempo: 60
+      });
+    }
+
+    updateBossDropdowns();
+    renderBossConfig();
+  });
 }
 
 /* =========================
 LOAD TIMERS CONFIG
 ========================= */
 
-function loadConfig(){
+function loadConfig() {
+  const configRef = ref(db, "config/timers");
 
- const configRef=ref(db,"config/timers")
+  onValue(configRef, (snapshot) => {
+    const data = snapshot.val();
 
- onValue(configRef,(snapshot)=>{
+    config.timers = data || [];
 
-const data = snapshot.val()
+    if (config.timers.length === 0) {
+      config.timers.push({ bossId: 0 });
+    }
 
-config.timers = data || []
+    intervals.length = config.timers.length;
 
-if(config.timers.length === 0){
-  config.timers.push({ bossId: 0 })
-}
-
-intervals.length = config.timers.length
-
-createTimers()
-syncTimers()
-
- })
-
+    createTimers();
+    syncTimers();
+  });
 }
 
 /* =========================
 SAVE GLOBAL
 ========================= */
 
-function saveGlobal(){
- set(ref(db,"config/timers"),config.timers)
+function saveGlobal() {
+  set(ref(db, "config/timers"), config.timers);
 }
 
-function saveConfig(){
- set(ref(db,"config/bosses"),config.bosses)
+function saveConfig() {
+  set(ref(db, "config/bosses"), config.bosses);
 }
 
 /* =========================
 CREATE TIMERS UI
 ========================= */
 
-function createTimers(){
+function createTimers() {
+  let container = document.getElementById("timers");
+  container.innerHTML = "";
 
- let container=document.getElementById("timers")
- container.innerHTML=""
+  config.timers.forEach((t, i) => {
+    let div = document.createElement("div");
+    div.className = "timer";
 
- config.timers.forEach((t,i)=>{
+    let select = document.createElement("select");
 
-  let div=document.createElement("div")
-  div.className="timer"
+    config.bosses.forEach((b, index) => {
+      let opt = document.createElement("option");
+      opt.value = index;
+      opt.textContent = b.nome;
+      select.appendChild(opt);
+    });
 
-  let select=document.createElement("select")
+    select.value = t.bossId || 0;
 
-  config.bosses.forEach((b,index)=>{
-   let opt=document.createElement("option")
-   opt.value=index
-   opt.textContent=b.nome
-   select.appendChild(opt)
-  })
+    select.onchange = () => {
+      config.timers[i].bossId = parseInt(select.value);
+      saveGlobal();
+    };
 
-  select.value=t.bossId || 0
+    let label = document.createElement("span");
+    label.className = "timeLabel";
+    label.textContent = "00:00";
 
-  select.onchange=()=>{
-   config.timers[i].bossId=parseInt(select.value)
-   saveGlobal()
-  }
+    let progress = document.createElement("div");
+    progress.className = "progress";
 
-let label=document.createElement("span")
-label.className = "timeLabel"
-  label.textContent="00:00"
+    let bar = document.createElement("div");
+    bar.className = "bar";
 
-  let progress=document.createElement("div")
-  progress.className="progress"
+    progress.appendChild(bar);
 
-  let bar=document.createElement("div")
-  bar.className="bar"
+    // =========================
+    // 🔔 BOTÃO DE ALARME (LOCAL)
+    // =========================
 
-  progress.appendChild(bar)
+    let alarmBtn = document.createElement("button");
 
-// =========================
-// 🔔 BOTÃO DE ALARME (LOCAL)
-// =========================
+    let bossId = t?.bossId ?? 0;
+    const storageKey = "alarmEnabled_boss_" + bossId;
 
-let alarmBtn = document.createElement("button")
+    let enabled = true;
 
-let bossId = t?.bossId ?? 0
-const storageKey = "alarmEnabled_boss_" + bossId
+    try {
+      enabled = localStorage.getItem(storageKey) !== "false";
+    } catch (e) {}
 
-let enabled = true
+    function updateIcon() {
+      alarmBtn.innerHTML = enabled ? "🔔" : "🔕";
+      alarmBtn.style.opacity = enabled ? "1" : "0.4";
+    }
 
-try {
-  enabled = localStorage.getItem(storageKey) !== "false"
-} catch(e) {}
+    updateIcon();
 
-function updateIcon(){
-  alarmBtn.innerHTML = enabled ? "🔔" : "🔕"
-  alarmBtn.style.opacity = enabled ? "1" : "0.4"
+    alarmBtn.onclick = () => {
+      enabled = !enabled;
+      try {
+        localStorage.setItem(storageKey, enabled);
+      } catch (e) {}
+      updateIcon();
+    };
+
+    alarmBtn.style.minWidth = "40px";
+    alarmBtn.style.display = "inline-block";
+    alarmBtn.style.textAlign = "center";
+    alarmBtn.style.padding = "6px 10px";
+    alarmBtn.style.fontSize = "16px";
+    alarmBtn.title = "Ativar/Desativar Alarme";
+
+    // =========================
+    // BOTÃO START/STOP
+    // =========================
+
+    let btn = document.createElement("button");
+    btn.className = "startBtn";
+    btn.textContent = "Start";
+
+    btn.onclick = () => toggleTimer(i);
+
+    div.append(select, label, progress, alarmBtn, btn);
+
+    container.appendChild(div);
+  });
 }
-
-updateIcon()
-
-alarmBtn.onclick = () => {
-  enabled = !enabled
-  try {
-    localStorage.setItem(storageKey, enabled)
-  } catch(e){}
-  updateIcon()
-}
-
-// garante visibilidade
-alarmBtn.style.minWidth = "40px"
-alarmBtn.style.display = "inline-block"
-alarmBtn.style.textAlign = "center"
-alarmBtn.style.padding = "6px 10px"
-alarmBtn.style.fontSize = "16px"
-
-alarmBtn.title = "Ativar/Desativar Alarme"
-
-  // =========================
-  // BOTÃO START/STOP
-  // =========================
-
-  let btn=document.createElement("button")
-    btn.className = "startBtn"
-  btn.textContent="Start"
-
-  btn.onclick=()=>toggleTimer(i)
-
-  div.append(select,label,progress,alarmBtn,btn)
-
-  container.appendChild(div)
-
- })
-
-}
-
-
 
 /* =========================
 ADD TIMER
 ========================= */
 
-document.getElementById("addTimer").onclick=()=>{
+document.getElementById("addTimer").onclick = () => {
+  if (config.timers.length >= 8) return;
 
- if(config.timers.length>=8) return
-
- config.timers.push({bossId:0})
- saveGlobal()
-
-}
+  config.timers.push({ bossId: 0 });
+  saveGlobal();
+};
 
 /* =========================
 REMOVE TIMER
 ========================= */
 
-document.getElementById("removeTimer").onclick=()=>{
+document.getElementById("removeTimer").onclick = () => {
+  if (config.timers.length <= 1) return;
 
- if(config.timers.length<=1) return
+  let index = config.timers.length - 1;
 
- let index=config.timers.length-1
+  stopTimer(index);
+  set(ref(db, "timers/" + index), null);
 
- stopTimer(index)
- set(ref(db,"timers/"+index),null)
+  config.timers.pop();
 
- config.timers.pop()
-
- saveGlobal()
-
-}
+  saveGlobal();
+};
 
 /* =========================
 START / STOP
 ========================= */
 
-function toggleTimer(i){
+function toggleTimer(i) {
+  stopAlarm();
 
- stopAlarm()
+  let timerDiv = document.querySelectorAll(".timer")[i];
 
- let timerDiv=document.querySelectorAll(".timer")[i]
+  if (timerDiv) {
+    timerDiv.classList.remove("finished");
+  }
 
- if(timerDiv){
-  timerDiv.classList.remove("finished")
- }
-
- if(intervals[i]){
-  stopTimer(i)
- }else{
-  startTimer(i)
- }
-
+  if (intervals[i]) {
+    stopTimer(i);
+  } else {
+    startTimer(i);
+  }
 }
 
 /* =========================
 START TIMER
 ========================= */
 
-function startTimer(i){
+function startTimer(i) {
+  let bossId = config.timers[i].bossId ?? 0;
+  if (!config.bosses[bossId]) return;
 
- let bossId=config.timers[i].bossId ?? 0
- if(!config.bosses[bossId]) return
+  let total = config.bosses[bossId].tempo * 60;
 
- let total=config.bosses[bossId].tempo*60
-
- set(ref(db,"timers/"+i),{
-
-  start: serverTimestamp(),
-  tempo: total
-
- })
-
+  set(ref(db, "timers/" + i), {
+    start: serverTimestamp(),
+    tempo: total
+  });
 }
 
 /* =========================
 STOP TIMER
 ========================= */
 
-function stopTimer(i){
+function stopTimer(i) {
+  clearInterval(intervals[i]);
+  intervals[i] = null;
 
- clearInterval(intervals[i])
- intervals[i]=null
+  delete activeTimers[i];
 
- delete activeTimers[i]
+  updateBigTimer();
 
- updateBigTimer()
+  let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
+  let bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
+  let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
 
- let label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
- let bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
- let btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
+  if (label) {
+    label.textContent = "00:00";
+    bar.style.width = "0%";
+    btn.textContent = "Start";
+  }
 
- if(label){
-
-  label.textContent="00:00"
-  bar.style.width="0%"
-  btn.textContent="Start"
-
- }
-
- set(ref(db,"timers/"+i),null)
-
+  set(ref(db, "timers/" + i), null);
 }
 
 /* =========================
 SYNC TIMERS
 ========================= */
 
-function syncTimers(){
+function syncTimers() {
+  timerListeners.forEach((unsub) => {
+    if (unsub) unsub();
+  });
 
- timerListeners.forEach(unsub=>{
-  if(unsub) unsub()
- })
+  timerListeners = [];
 
- timerListeners=[]
+  config.timers.forEach((t, i) => {
+    const timerRef = ref(db, "timers/" + i);
 
- config.timers.forEach((t,i)=>{
+    const unsubscribe = onValue(timerRef, (snapshot) => {
+      const data = snapshot.val();
 
-  const timerRef = ref(db,"timers/"+i)
+      const label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
+      const bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
+      const btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
 
-  const unsubscribe = onValue(timerRef,(snapshot)=>{
+      if (!label || !bar || !btn) return;
 
-   const data = snapshot.val()
+      if (data === null) {
+        clearInterval(intervals[i]);
+        intervals[i] = null;
 
-   const label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
-   const bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
-   const btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
+        delete activeTimers[i];
+        updateBigTimer();
 
-   if(!label || !bar || !btn) return
+        label.textContent = "00:00";
+        bar.style.width = "0%";
+        btn.textContent = "Start";
 
-   if(data===null){
+        return;
+      }
 
-    clearInterval(intervals[i])
-    intervals[i]=null
+      runTimer(i, data);
+    });
 
-    delete activeTimers[i]
-    updateBigTimer()
-
-    label.textContent="00:00"
-    bar.style.width="0%"
-    btn.textContent="Start"
-
-    return
-   }
-
-   runTimer(i,data)
-
-  })
-
-  timerListeners.push(unsubscribe)
-
- })
-
+    timerListeners.push(unsubscribe);
+  });
 }
 
 /* =========================
 RUN TIMER
 ========================= */
 
-function runTimer(i,data){
+function runTimer(i, data) {
+  let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
+  let bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
+  let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
 
- let label=document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel")
- let bar=document.querySelectorAll(".timer")[i]?.querySelector(".bar")
- let btn=document.querySelectorAll(".timer")[i]?.querySelector(".startBtn")
+  let total = data.tempo;
 
- let total=data.tempo
+  clearInterval(intervals[i]);
 
- clearInterval(intervals[i])
+  intervals[i] = setInterval(() => {
+    let elapsed = (serverNow() - data.start) / 1000;
+    let remaining = Math.floor(total - elapsed);
 
- intervals[i]=setInterval(()=>{
+    if (remaining < 0) remaining = 0;
 
-  let elapsed=(serverNow()-data.start)/1000
-  let remaining=Math.floor(total-elapsed)
+    let m = Math.floor(remaining / 60);
+    let s = remaining % 60;
 
-  if(remaining<0) remaining=0
+    label.textContent =
+      String(m).padStart(2, "0") + ":" +
+      String(s).padStart(2, "0");
 
-  let m=Math.floor(remaining/60)
-  let s=remaining%60
+    bar.style.width = ((total - remaining) / total * 100) + "%";
 
-  label.textContent =
-   String(m).padStart(2,"0")+":"+
-   String(s).padStart(2,"0")
+    btn.textContent = "Stop";
 
-  bar.style.width=((total-remaining)/total*100)+"%"
+    activeTimers[i] = {
+      remaining: remaining,
+      label: config.bosses[config.timers[i].bossId].nome
+    };
 
-  btn.textContent="Stop"
+    updateBigTimer();
 
-  activeTimers[i]={
+    if (remaining <= 0) {
+      remaining = 0;
+      label.textContent = "00:00";
 
-   remaining:remaining,
-   label:config.bosses[config.timers[i].bossId].nome
-
-  }
-
-  updateBigTimer()
-
-if(remaining<=0){
-
- remaining=0
- label.textContent="00:00"
-
- triggerTimerFinished(i)
-
-}
-
-},1000)
-
+      triggerTimerFinished(i);
+    }
+  }, 1000);
 }
 
 /* =========================
 TIMER FINISHED
 ========================= */
 
-function triggerTimerFinished(i){
+function triggerTimerFinished(i) {
+  clearInterval(intervals[i]);
 
- clearInterval(intervals[i])
+  let timerDiv = document.querySelectorAll(".timer")[i];
 
- let timerDiv=document.querySelectorAll(".timer")[i]
+  if (timerDiv) {
+    timerDiv.classList.add("finished");
+  }
 
- if(timerDiv){
-  timerDiv.classList.add("finished")
- }
+  const bossId = config.timers[i]?.bossId ?? 0;
+  const storageKey = "alarmEnabled_boss_" + bossId;
+  const enabled = localStorage.getItem(storageKey) !== "false";
 
- // =========================
- // 🔔 VERIFICA SE ALARME ESTÁ ATIVO (LOCAL)
- // =========================
-
-const bossId = config.timers[i]?.bossId ?? 0
-const storageKey = "alarmEnabled_boss_" + bossId
- const enabled = localStorage.getItem(storageKey) !== "false"
-
- if(enabled){
-  playAlarm()
- }
-
+  if (enabled) {
+    playAlarm();
+  }
 }
 
 /* =========================
 BIG TIMER
 ========================= */
 
-function updateBigTimer(){
+function updateBigTimer() {
+  let keys = Object.keys(activeTimers);
 
- let keys=Object.keys(activeTimers)
-
- if(keys.length===0){
-
-  document.getElementById("bigTimer").textContent="00:00"
-  document.getElementById("bigLabel").textContent="No Timer Running"
-
-  return
-
- }
-
- let lowest=null
- let index=null
-
- keys.forEach(k=>{
-
-  if(lowest===null || activeTimers[k].remaining<lowest){
-   lowest=activeTimers[k].remaining
-   index=k
+  if (keys.length === 0) {
+    document.getElementById("bigTimer").textContent = "00:00";
+    document.getElementById("bigLabel").textContent = "No Timer Running";
+    return;
   }
 
- })
+  let lowest = null;
+  let index = null;
 
- let remaining=activeTimers[index].remaining
+  keys.forEach((k) => {
+    if (lowest === null || activeTimers[k].remaining < lowest) {
+      lowest = activeTimers[k].remaining;
+      index = k;
+    }
+  });
 
- let m=Math.floor(remaining/60)
- let s=remaining%60
+  let remaining = activeTimers[index].remaining;
 
- document.getElementById("bigTimer").textContent =
-  String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")
+  let m = Math.floor(remaining / 60);
+  let s = remaining % 60;
 
- document.getElementById("bigLabel").textContent =
-  activeTimers[index].label
+  document.getElementById("bigTimer").textContent =
+    String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 
+  document.getElementById("bigLabel").textContent =
+    activeTimers[index].label;
 }
 
 /* =========================
 ALARM
 ========================= */
 
-function playAlarm(){
+function playAlarm() {
+  let audio = document.getElementById("alarmSound");
+  if (!audio) return;
 
- let audio=document.getElementById("alarmSound")
- if(!audio) return
-
- audio.currentTime=0
- audio.play()
-
+  audio.currentTime = 0;
+  audio.play();
 }
 
-function stopAlarm(){
+function stopAlarm() {
+  let audio = document.getElementById("alarmSound");
+  if (!audio) return;
 
- let audio=document.getElementById("alarmSound")
- if(!audio) return
-
- audio.pause()
- audio.currentTime=0
-
+  audio.pause();
+  audio.currentTime = 0;
 }
 
 /* =========================
 OBS MODE
 ========================= */
 
-const obsBtn = document.getElementById("obsBtn")
-const exitObs = document.getElementById("exitObs")
+const obsBtn = document.getElementById("obsBtn");
+const exitObs = document.getElementById("exitObs");
 
-obsBtn.onclick = ()=>{
+obsBtn.onclick = () => {
+  const rightPanel = document.querySelector(".rightPanel");
+  const leftPanel = document.querySelector(".leftPanel");
 
- const rightPanel = document.querySelector(".rightPanel")
- const leftPanel = document.querySelector(".leftPanel")
+  rightPanel.style.display = "none";
+  leftPanel.style.width = "100%";
 
- rightPanel.style.display = "none"
- leftPanel.style.width = "100%"
+  obsBtn.style.display = "none";
+  exitObs.classList.remove("hidden");
+};
 
- obsBtn.style.display = "none"
- exitObs.classList.remove("hidden")
+exitObs.onclick = () => {
+  const rightPanel = document.querySelector(".rightPanel");
+  const leftPanel = document.querySelector(".leftPanel");
 
-}
+  rightPanel.style.display = "";
+  leftPanel.style.width = "40%";
 
-exitObs.onclick = ()=>{
-
- const rightPanel = document.querySelector(".rightPanel")
- const leftPanel = document.querySelector(".leftPanel")
-
- rightPanel.style.display = ""
- leftPanel.style.width = "40%"
-
- obsBtn.style.display = "inline-block"
- exitObs.classList.add("hidden")
-
-}
+  obsBtn.style.display = "inline-block";
+  exitObs.classList.add("hidden");
+};
 
 /* =========================
 ADMIN USERS PANEL
@@ -655,30 +575,56 @@ const adminUsersList = document.getElementById("adminUsersList");
 let currentUsername = null;
 let onlineUsersUnsubscribe = null;
 
-function isAdminUser(user){
+// Aceita admin por username ou email completo
+const ADMIN_USERS = [
+  "pain",
+  "dell",
+  "million",
+  "theuzin"
+];
+
+const ADMIN_EMAILS = [
+  "pain@timer.com",
+  "dell@timer.com",
+  "theuzin@timer.com",
+  "million@timer.com"
+];
+
+function isAdminUser(user) {
   if (!user?.email) return false;
-  return user.email.toLowerCase() === "admin@timer.com";
+
+  const email = user.email.toLowerCase();
+  const username = email.split("@")[0];
+
+  return ADMIN_EMAILS.includes(email) || ADMIN_USERS.includes(username);
 }
 
-function openAdminUsersPanel(){
+function openAdminUsersPanel() {
+  if (!adminUsersPanel) return;
   adminUsersPanel.classList.remove("hidden");
 }
 
-function closeAdminUsersPanel(){
+function closeAdminUsersPanel() {
+  if (!adminUsersPanel) return;
   adminUsersPanel.classList.add("hidden");
 }
 
-adminUsersBtn.onclick = (e) => {
-  e.stopPropagation();
-  openAdminUsersPanel();
-};
+if (adminUsersBtn) {
+  adminUsersBtn.onclick = (e) => {
+    e.stopPropagation();
+    openAdminUsersPanel();
+  };
+}
 
-closeAdminUsers.onclick = (e) => {
-  e.stopPropagation();
-  closeAdminUsersPanel();
-};
+if (closeAdminUsers) {
+  closeAdminUsers.onclick = (e) => {
+    e.stopPropagation();
+    closeAdminUsersPanel();
+  };
+}
 
 document.addEventListener("click", (e) => {
+  if (!adminUsersPanel || !adminUsersBtn) return;
   if (adminUsersPanel.classList.contains("hidden")) return;
 
   if (!adminUsersPanel.contains(e.target) && !adminUsersBtn.contains(e.target)) {
@@ -686,7 +632,9 @@ document.addEventListener("click", (e) => {
   }
 });
 
-function renderOnlineUsers(usersObj){
+function renderOnlineUsers(usersObj) {
+  if (!adminUsersList) return;
+
   adminUsersList.innerHTML = "";
 
   if (!usersObj) {
@@ -718,7 +666,7 @@ function renderOnlineUsers(usersObj){
   });
 }
 
-function watchOnlineUsers(){
+function watchOnlineUsers() {
   const usersRef = ref(db, "onlineUsers");
 
   if (onlineUsersUnsubscribe) {
@@ -730,10 +678,17 @@ function watchOnlineUsers(){
   });
 }
 
-function markUserOnline(user){
+function stopWatchingOnlineUsers() {
+  if (onlineUsersUnsubscribe) {
+    onlineUsersUnsubscribe();
+    onlineUsersUnsubscribe = null;
+  }
+}
+
+function markUserOnline(user) {
   if (!user?.email) return;
 
-  const username = user.email.split("@")[0];
+  const username = user.email.split("@")[0].toLowerCase();
   currentUsername = username;
 
   const userRef = ref(db, "onlineUsers/" + username);
@@ -747,8 +702,9 @@ function markUserOnline(user){
   onDisconnect(userRef).remove();
 }
 
-function markUserOffline(){
+function markUserOffline() {
   if (!currentUsername) return;
+
   set(ref(db, "onlineUsers/" + currentUsername), null);
   currentUsername = null;
 }
@@ -757,34 +713,26 @@ function markUserOffline(){
 CONFIG PANEL
 ========================= */
 
-document.getElementById("configBtn").onclick=(e)=>{
+document.getElementById("configBtn").onclick = (e) => {
+  e.stopPropagation();
+  document.getElementById("configPanel").classList.toggle("hidden");
+};
 
- e.stopPropagation()
+document.getElementById("closeConfig").onclick = (e) => {
+  e.stopPropagation();
+  document.getElementById("configPanel").classList.add("hidden");
+};
 
- document.getElementById("configPanel").classList.toggle("hidden")
+document.addEventListener("click", (e) => {
+  const panel = document.getElementById("configPanel");
+  const btn = document.getElementById("configBtn");
 
-}
+  if (panel.classList.contains("hidden")) return;
 
-document.getElementById("closeConfig").onclick=(e)=>{
-
- e.stopPropagation()
-
- document.getElementById("configPanel").classList.add("hidden")
-
-}
-
-document.addEventListener("click",(e)=>{
-
- const panel=document.getElementById("configPanel")
- const btn=document.getElementById("configBtn")
-
- if(panel.classList.contains("hidden")) return
-
- if(!panel.contains(e.target) && !btn.contains(e.target)){
-  panel.classList.add("hidden")
- }
-
-})
+  if (!panel.contains(e.target) && !btn.contains(e.target)) {
+    panel.classList.add("hidden");
+  }
+});
 
 /* =========================
 AUTH & LOGIN (MODO USUÁRIO)
@@ -803,13 +751,11 @@ btnLogin.onclick = () => {
     return;
   }
 
-  // Transformamos "admin" em "admin@timer.com" apenas para o Firebase
   const internalEmail = `${userField.toLowerCase()}@timer.com`;
 
   signInWithEmailAndPassword(auth, internalEmail, passField)
     .then(() => {
-       errorMsg.textContent = "";
-       // O onAuthStateChanged cuidará do resto
+      errorMsg.textContent = "";
     })
     .catch((error) => {
       errorMsg.textContent = "Usuário ou senha inválidos.";
@@ -817,7 +763,6 @@ btnLogin.onclick = () => {
     });
 };
 
-// Mantenha o observador para liberar o app
 onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.classList.remove("active");
@@ -827,17 +772,22 @@ onAuthStateChanged(auth, (user) => {
     markUserOnline(user);
 
     if (isAdminUser(user)) {
-      adminUsersBtn.classList.remove("hidden");
+      adminUsersBtn?.classList.remove("hidden");
       watchOnlineUsers();
     } else {
-      adminUsersBtn.classList.add("hidden");
+      adminUsersBtn?.classList.add("hidden");
       closeAdminUsersPanel();
+      stopWatchingOnlineUsers();
     }
-
   } else {
     loginScreen.classList.add("active");
-    adminUsersBtn.classList.add("hidden");
+    adminUsersBtn?.classList.add("hidden");
     closeAdminUsersPanel();
+    stopWatchingOnlineUsers();
     markUserOffline();
   }
+});
+
+window.addEventListener("beforeunload", () => {
+  markUserOffline();
 });
