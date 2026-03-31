@@ -1,7 +1,18 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, onValue, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
+import {
+  getDatabase,
+  ref,
+  set,
+  onValue,
+  serverTimestamp,
+  onDisconnect
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 /* =========================
 FIREBASE
@@ -96,7 +107,6 @@ function renderBossConfig() {
     };
 
     row.append(nome, tempo, del);
-
     div.appendChild(row);
   });
 }
@@ -113,7 +123,6 @@ function updateBossDropdowns() {
       let opt = document.createElement("option");
       opt.value = index;
       opt.textContent = b.nome;
-
       select.appendChild(opt);
     });
 
@@ -273,7 +282,6 @@ function createTimers() {
     btn.onclick = () => toggleTimer(i);
 
     div.append(select, label, progress, alarmBtn, btn);
-
     container.appendChild(div);
   });
 }
@@ -451,7 +459,6 @@ function runTimer(i, data) {
     if (remaining <= 0) {
       remaining = 0;
       label.textContent = "00:00";
-
       triggerTimerFinished(i);
     }
   }, 1000);
@@ -572,10 +579,10 @@ const adminUsersPanel = document.getElementById("adminUsersPanel");
 const closeAdminUsers = document.getElementById("closeAdminUsers");
 const adminUsersList = document.getElementById("adminUsersList");
 
-let currentUsername = null;
+let currentUserId = null;
 let onlineUsersUnsubscribe = null;
+let presenceUnsubscribe = null;
 
-// Aceita admin por username ou email completo
 const ADMIN_USERS = [
   "pain",
   "dell",
@@ -583,20 +590,11 @@ const ADMIN_USERS = [
   "theuzin"
 ];
 
-const ADMIN_EMAILS = [
-  "pain@timer.com",
-  "dell@timer.com",
-  "theuzin@timer.com",
-  "million@timer.com"
-];
-
 function isAdminUser(user) {
   if (!user?.email) return false;
 
-  const email = user.email.toLowerCase();
-  const username = email.split("@")[0];
-
-  return ADMIN_EMAILS.includes(email) || ADMIN_USERS.includes(username);
+  const username = user.email.split("@")[0].toLowerCase();
+  return ADMIN_USERS.includes(username);
 }
 
 function openAdminUsersPanel() {
@@ -649,13 +647,13 @@ function renderOnlineUsers(usersObj) {
     return;
   }
 
-  entries.forEach(([username, data]) => {
+  entries.forEach(([uid, data]) => {
     const row = document.createElement("div");
     row.className = "admin-user-row";
 
     const name = document.createElement("div");
     name.className = "admin-user-name";
-    name.textContent = data?.username || username;
+    name.textContent = data?.username || data?.email || uid;
 
     const status = document.createElement("div");
     status.className = "admin-user-status";
@@ -673,9 +671,16 @@ function watchOnlineUsers() {
     onlineUsersUnsubscribe();
   }
 
-  onlineUsersUnsubscribe = onValue(usersRef, (snapshot) => {
-    renderOnlineUsers(snapshot.val());
-  });
+  onlineUsersUnsubscribe = onValue(
+    usersRef,
+    (snapshot) => {
+      console.log("onlineUsers snapshot:", snapshot.val());
+      renderOnlineUsers(snapshot.val());
+    },
+    (error) => {
+      console.error("Erro ao ler onlineUsers:", error);
+    }
+  );
 }
 
 function stopWatchingOnlineUsers() {
@@ -685,28 +690,66 @@ function stopWatchingOnlineUsers() {
   }
 }
 
+function stopPresenceTracking() {
+  if (presenceUnsubscribe) {
+    presenceUnsubscribe();
+    presenceUnsubscribe = null;
+  }
+}
+
 function markUserOnline(user) {
-  if (!user?.email) return;
+  if (!user?.email || !user?.uid) return;
 
   const username = user.email.split("@")[0].toLowerCase();
-  currentUsername = username;
+  currentUserId = user.uid;
 
-  const userRef = ref(db, "onlineUsers/" + username);
+  const userRef = ref(db, "onlineUsers/" + user.uid);
+  const connectedRef = ref(db, ".info/connected");
 
-  set(userRef, {
-    username,
-    email: user.email,
-    loginAt: serverTimestamp()
+  stopPresenceTracking();
+
+  presenceUnsubscribe = onValue(connectedRef, (snap) => {
+    if (snap.val() !== true) {
+      console.log("Cliente ainda não conectado ao Realtime Database.");
+      return;
+    }
+
+    onDisconnect(userRef)
+      .remove()
+      .then(() => {
+        console.log("onDisconnect registrado para:", username);
+      })
+      .catch((error) => {
+        console.error("Erro ao registrar onDisconnect:", error);
+      });
+
+    set(userRef, {
+      uid: user.uid,
+      username,
+      email: user.email,
+      loginAt: serverTimestamp()
+    })
+      .then(() => {
+        console.log("Usuário marcado online:", username);
+      })
+      .catch((error) => {
+        console.error("Erro ao gravar onlineUsers:", error);
+      });
   });
-
-  onDisconnect(userRef).remove();
 }
 
 function markUserOffline() {
-  if (!currentUsername) return;
+  if (!currentUserId) return;
 
-  set(ref(db, "onlineUsers/" + currentUsername), null);
-  currentUsername = null;
+  set(ref(db, "onlineUsers/" + currentUserId), null)
+    .then(() => {
+      console.log("Usuário removido de onlineUsers:", currentUserId);
+    })
+    .catch((error) => {
+      console.error("Erro ao remover usuário de onlineUsers:", error);
+    });
+
+  currentUserId = null;
 }
 
 /* =========================
@@ -784,6 +827,7 @@ onAuthStateChanged(auth, (user) => {
     adminUsersBtn?.classList.add("hidden");
     closeAdminUsersPanel();
     stopWatchingOnlineUsers();
+    stopPresenceTracking();
     markUserOffline();
   }
 });
