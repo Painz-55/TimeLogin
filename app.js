@@ -299,7 +299,7 @@ function createTimers() {
 
     function updateIcon() {
       enabled = isAlarmEnabled(i);
-      alarmBtn.innerHTML = enabled ? "ðŸ””" : "ðŸ”•";
+      alarmBtn.innerHTML = enabled ? "&#128276;" : "&#128277;";
       alarmBtn.style.opacity = enabled ? "1" : "0.4";
     }
 
