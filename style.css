@@ -1,258 +1,321 @@
-body{
-
-background:#0f0f12;
-color:white;
-font-family:Arial;
-margin:0;
-
+:root {
+  --bg: #091018;
+  --bg-accent: #101b2b;
+  --panel: rgba(12, 18, 28, 0.88);
+  --panel-strong: rgba(18, 27, 40, 0.94);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #f4f7fb;
+  --muted: #9aa9bd;
+  --danger: #ff5f5f;
+  --danger-strong: #ff3d57;
+  --success: #86f7a7;
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 
-.dashboard{
-
-display:flex;
-height:100vh;
-
+* {
+  box-sizing: border-box;
 }
 
-/* LEFT */
-
-.leftPanel{
-
-width:40%;
-background:#111;
-display:flex;
-align-items:center;
-justify-content:center;
-
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: "Inter", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 95, 95, 0.16), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(87, 162, 255, 0.18), transparent 28%),
+    linear-gradient(135deg, var(--bg) 0%, #0b1420 45%, var(--bg-accent) 100%);
 }
 
-.mainTimer{
-
-text-align:center;
-
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
 }
 
-#bigTimer{
-
-font-size:140px;
-font-weight:bold;
-color:#ff4c4c;
-
+.dashboard {
+  display: flex;
+  min-height: 100vh;
 }
 
-#bigLabel{
-
-font-size:22px;
-opacity:.7;
-
+.leftPanel {
+  position: relative;
+  width: 40%;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    rgba(0, 0, 0, 0.12);
+  border-right: 1px solid var(--line);
 }
 
-/* RIGHT */
-
-.rightPanel{
-
-flex:1;
-padding:30px;
-overflow:auto;
-
+.mainTimer {
+  width: min(100%, 480px);
+  padding: 40px 32px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
 }
 
-.header{
-
-display:flex;
-justify-content:space-between;
-align-items:center;
-margin-bottom:20px;
-
+#bigTimer {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(88px, 11vw, 140px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: #fff2f2;
+  text-shadow: 0 0 25px rgba(255, 95, 95, 0.18);
 }
 
-/* 🔥 CORREÇÃO AQUI */
-.timer{
-
-background:#1b1b1f;
-padding:20px;
-border-radius:8px;
-margin-bottom:15px;
-
-display:flex;
-align-items:center;
-gap:15px;
-
-/* 👇 ESSENCIAL */
-flex-wrap:wrap;
-
+#bigLabel {
+  margin-top: 14px;
+  font-size: 18px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.timer span:first-child{
-
-width:150px;
-font-size:18px;
-
+.rightPanel {
+  flex: 1;
+  padding: 30px;
+  overflow: auto;
 }
 
-.timer span:nth-child(2){
-
-width:70px;
-font-size:18px;
-
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-/* 🔥 MELHOR CONTROLE DA BARRA */
-.progress{
-
-flex:1 1 200px;
-height:8px;
-background:#333;
-border-radius:5px;
-overflow:hidden;
-
+.header h1,
+.login-box h2,
+#configPanel h2,
+#adminUsersPanel h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -0.03em;
 }
 
-.bar{
-
-height:100%;
-background:#ff4c4c;
-width:0%;
-
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-/* 🔥 GARANTE QUE BOTÕES NÃO SUMAM */
-.timer button{
-
-flex-shrink:0;
-
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
-button{
-
-background:#ff4c4c;
-border:none;
-color:white;
-padding:8px 14px;
-border-radius:4px;
-cursor:pointer;
-
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-button:hover{
-
-background:#ff6b6b;
-
+.timer:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
 }
 
-/* CONFIG */
-
-#configPanel{
-
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-background:#1b1b1f;
-padding:30px;
-border-radius:8px;
-
+.timer select,
+.timer span:first-child {
+  width: 150px;
+  font-size: 16px;
 }
 
-.hidden{
-
-display:none;
-
+.timer span:nth-child(2) {
+  width: 72px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
 }
 
-input{
-
-background:#111;
-border:1px solid #444;
-color:white;
-padding:5px;
-
+.progress {
+  position: relative;
+  flex: 1 1 220px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
 }
 
-#exitObs{
-
-position:absolute;
-top:20px;
-left:20px;
-z-index:10;
-
+.bar {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--danger-strong), #ff8a5b);
+  box-shadow: 0 0 18px rgba(255, 95, 95, 0.35);
 }
 
-@keyframes blinkTimer{
-
-0%{background:#1b1b1f;}
-50%{background:#8b0000;}
-100%{background:#1b1b1f;}
-
+.timer button,
+button {
+  flex-shrink: 0;
 }
 
-.timer.finished{
-
-animation:blinkTimer 1s infinite;
-
+button,
+select,
+input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  transition: 0.2s ease;
 }
 
-#configPanel{
-
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-background:#1b1b1f;
-padding:30px;
-border-radius:8px;
-z-index:10;
-
-box-shadow:0 0 25px rgba(0,0,0,0.6);
-
+button {
+  padding: 9px 15px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--danger), var(--danger-strong));
+  box-shadow: 0 10px 20px rgba(255, 61, 87, 0.22);
 }
 
-#closeConfig{
-
-position:absolute;
-top:10px;
-right:10px;
-
-background:none;
-border:none;
-
-color:white;
-font-size:18px;
-cursor:pointer;
-
+button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 
-#closeConfig:hover{
-
-color:#ff4444;
-
+button:active {
+  transform: translateY(0);
 }
 
-.deleteBoss{
-
-background:none;
-border:none;
-color:#ff4444;
-cursor:pointer;
-font-size:16px;
-
+.secondary-btn {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
 }
 
-.deleteBoss:hover{
-
-color:#ff0000;
-
+select,
+input {
+  color: var(--text);
+  background: rgba(4, 8, 15, 0.7);
 }
 
-/* LOGIN OVERLAY */
+select {
+  padding: 10px 12px;
+}
+
+input {
+  padding: 10px 12px;
+}
+
+#exitObs {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+}
+
+@keyframes blinkTimer {
+  0% {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  }
+  50% {
+    background: linear-gradient(180deg, rgba(255, 61, 87, 0.5), rgba(139, 0, 0, 0.34));
+  }
+  100% {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  }
+}
+
+.timer.finished {
+  border-color: rgba(255, 95, 95, 0.45);
+  animation: blinkTimer 1s infinite;
+}
+
+#configPanel,
+.admin-panel,
+.login-box {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+#configPanel,
+.admin-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 560px);
+  padding: 30px;
+  border-radius: 24px;
+}
+
+#closeConfig,
+#closeAdminUsers {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 6px 10px;
+  font-size: 18px;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+#closeConfig:hover,
+#closeAdminUsers:hover {
+  color: var(--danger);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bossRow {
+  display: grid;
+  grid-template-columns: 1fr 90px 48px;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.deleteBoss {
+  background: rgba(255, 95, 95, 0.12);
+  box-shadow: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .login-overlay {
   position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: #0f0f12;
+  inset: 0;
+  z-index: 9999;
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  padding: 24px;
+  background: rgba(6, 10, 16, 0.72);
+  backdrop-filter: blur(10px);
 }
 
 .login-overlay.active {
@@ -260,77 +323,106 @@ color:#ff0000;
 }
 
 .login-box {
-  background: #1b1b1f;
+  width: min(100%, 420px);
   padding: 40px;
-  border-radius: 8px;
+  border-radius: 28px;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
 .login-box input {
   display: block;
-  width: 250px;
-  margin: 10px auto;
-  padding: 10px;
+  width: 100%;
+  margin: 12px auto;
 }
 
 .login-box button {
   width: 100%;
   margin-top: 10px;
-  padding: 10px;
-}
-
-.admin-panel {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: #1b1b1f;
-  padding: 30px;
-  border-radius: 8px;
-  z-index: 20;
-  min-width: 320px;
-  max-width: 500px;
-  box-shadow: 0 0 25px rgba(0,0,0,0.6);
-}
-
-#closeAdminUsers {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-#closeAdminUsers:hover {
-  color: #ff4444;
+  padding: 12px;
 }
 
 #adminUsersList {
-  margin-top: 20px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 20px;
 }
 
 .admin-user-row {
-  background: #111;
-  border: 1px solid #333;
-  padding: 10px 12px;
-  border-radius: 6px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .admin-user-name {
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .admin-user-status {
-  color: #7CFC00;
+  color: var(--success);
   font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 980px) {
+  .dashboard {
+    flex-direction: column;
+  }
+
+  .leftPanel {
+    width: 100%;
+    min-height: 38vh;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rightPanel {
+    padding: 22px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .headerActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .leftPanel,
+  .rightPanel {
+    padding: 18px;
+  }
+
+  .mainTimer,
+  .login-box,
+  #configPanel,
+  .admin-panel {
+    padding: 22px;
+    border-radius: 20px;
+  }
+
+  .timer {
+    padding: 16px;
+  }
+
+  .timer select,
+  .timer span:first-child,
+  .timer span:nth-child(2),
+  .progress {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .bossRow {
+    grid-template-columns: 1fr;
+  }
 }
