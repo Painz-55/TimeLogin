@@ -61,6 +61,51 @@ let config = {
 let intervals = [];
 let activeTimers = {};
 let timerListeners = [];
+let unsubscribeBosses = null;
+let unsubscribeConfig = null;
+
+function getTimerBoss(i) {
+  const bossId = config.timers[i]?.bossId ?? 0;
+  return config.bosses[bossId] || null;
+}
+
+function getAlarmStorageKey(i) {
+  const bossId = config.timers[i]?.bossId ?? 0;
+  return "alarmEnabled_boss_" + bossId;
+}
+
+function isAlarmEnabled(i) {
+  try {
+    return localStorage.getItem(getAlarmStorageKey(i)) !== "false";
+  } catch (e) {
+    return true;
+  }
+}
+
+function stopAllTimerListeners() {
+  timerListeners.forEach((unsub) => {
+    if (unsub) unsub();
+  });
+
+  timerListeners = [];
+}
+
+function cleanupRealtimeListeners() {
+  stopAllTimerListeners();
+
+  if (unsubscribeBosses) {
+    unsubscribeBosses();
+    unsubscribeBosses = null;
+  }
+
+  if (unsubscribeConfig) {
+    unsubscribeConfig();
+    unsubscribeConfig = null;
+  }
+
+  stopWatchingOnlineUsers();
+  stopPresenceTracking();
+}
 
 /* =========================
 LOAD BOSSES
@@ -142,7 +187,11 @@ document.getElementById("addBoss").onclick = () => {
 function loadBosses() {
   const bossRef = ref(db, "config/bosses");
 
-  onValue(bossRef, (snapshot) => {
+  if (unsubscribeBosses) {
+    unsubscribeBosses();
+  }
+
+  unsubscribeBosses = onValue(bossRef, (snapshot) => {
     const data = snapshot.val();
 
     config.bosses = data || [];
@@ -166,7 +215,11 @@ LOAD TIMERS CONFIG
 function loadConfig() {
   const configRef = ref(db, "config/timers");
 
-  onValue(configRef, (snapshot) => {
+  if (unsubscribeConfig) {
+    unsubscribeConfig();
+  }
+
+  unsubscribeConfig = onValue(configRef, (snapshot) => {
     const data = snapshot.val();
 
     config.timers = data || [];
@@ -220,6 +273,7 @@ function createTimers() {
     select.onchange = () => {
       config.timers[i].bossId = parseInt(select.value);
       saveGlobal();
+      updateIcon();
     };
 
     let label = document.createElement("span");
@@ -235,31 +289,26 @@ function createTimers() {
     progress.appendChild(bar);
 
     // =========================
-    // 🔔 BOTÃO DE ALARME (LOCAL)
+    // ðŸ”” BOTÃƒO DE ALARME (LOCAL)
     // =========================
 
     let alarmBtn = document.createElement("button");
-
-    let bossId = t?.bossId ?? 0;
-    const storageKey = "alarmEnabled_boss_" + bossId;
-
     let enabled = true;
 
-    try {
-      enabled = localStorage.getItem(storageKey) !== "false";
-    } catch (e) {}
+    
 
     function updateIcon() {
-      alarmBtn.innerHTML = enabled ? "🔔" : "🔕";
+      enabled = isAlarmEnabled(i);
+      alarmBtn.innerHTML = enabled ? "ðŸ””" : "ðŸ”•";
       alarmBtn.style.opacity = enabled ? "1" : "0.4";
     }
 
     updateIcon();
 
     alarmBtn.onclick = () => {
-      enabled = !enabled;
+      const enabled = !isAlarmEnabled(i);
       try {
-        localStorage.setItem(storageKey, enabled);
+        localStorage.setItem(getAlarmStorageKey(i), enabled);
       } catch (e) {}
       updateIcon();
     };
@@ -272,7 +321,7 @@ function createTimers() {
     alarmBtn.title = "Ativar/Desativar Alarme";
 
     // =========================
-    // BOTÃO START/STOP
+    // BOTÃƒO START/STOP
     // =========================
 
     let btn = document.createElement("button");
@@ -339,10 +388,10 @@ START TIMER
 ========================= */
 
 function startTimer(i) {
-  let bossId = config.timers[i].bossId ?? 0;
-  if (!config.bosses[bossId]) return;
+  const boss = getTimerBoss(i);
+  if (!boss) return;
 
-  let total = config.bosses[bossId].tempo * 60;
+  let total = boss.tempo * 60;
 
   set(ref(db, "timers/" + i), {
     start: serverTimestamp(),
@@ -392,6 +441,7 @@ function syncTimers() {
     const unsubscribe = onValue(timerRef, (snapshot) => {
       const data = snapshot.val();
 
+      const timerDiv = document.querySelectorAll(".timer")[i];
       const label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
       const bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
       const btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
@@ -405,6 +455,7 @@ function syncTimers() {
         delete activeTimers[i];
         updateBigTimer();
 
+        timerDiv?.classList.remove("finished");
         label.textContent = "00:00";
         bar.style.width = "0%";
         btn.textContent = "Start";
@@ -424,13 +475,19 @@ RUN TIMER
 ========================= */
 
 function runTimer(i, data) {
+  let timerDiv = document.querySelectorAll(".timer")[i];
   let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
   let bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
   let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
+  const boss = getTimerBoss(i);
+
+  if (!label || !bar || !btn || !boss) return;
 
   let total = data.tempo;
 
   clearInterval(intervals[i]);
+  timerDiv?.classList.remove("finished");
+  stopAlarm();
 
   intervals[i] = setInterval(() => {
     let elapsed = (serverNow() - data.start) / 1000;
@@ -451,7 +508,7 @@ function runTimer(i, data) {
 
     activeTimers[i] = {
       remaining: remaining,
-      label: config.bosses[config.timers[i].bossId].nome
+      label: boss.nome
     };
 
     updateBigTimer();
@@ -470,18 +527,28 @@ TIMER FINISHED
 
 function triggerTimerFinished(i) {
   clearInterval(intervals[i]);
+  intervals[i] = null;
+
+  delete activeTimers[i];
+  updateBigTimer();
 
   let timerDiv = document.querySelectorAll(".timer")[i];
+  let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
+  let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
 
   if (timerDiv) {
     timerDiv.classList.add("finished");
   }
 
-  const bossId = config.timers[i]?.bossId ?? 0;
-  const storageKey = "alarmEnabled_boss_" + bossId;
-  const enabled = localStorage.getItem(storageKey) !== "false";
+  if (label) {
+    label.textContent = "00:00";
+  }
 
-  if (enabled) {
+  if (btn) {
+    btn.textContent = "Start";
+  }
+
+  if (isAlarmEnabled(i)) {
     playAlarm();
   }
 }
@@ -636,14 +703,14 @@ function renderOnlineUsers(usersObj) {
   adminUsersList.innerHTML = "";
 
   if (!usersObj) {
-    adminUsersList.innerHTML = "<div>Nenhum usuário logado.</div>";
+    adminUsersList.innerHTML = "<div>Nenhum usuÃ¡rio logado.</div>";
     return;
   }
 
   const entries = Object.entries(usersObj);
 
   if (entries.length === 0) {
-    adminUsersList.innerHTML = "<div>Nenhum usuário logado.</div>";
+    adminUsersList.innerHTML = "<div>Nenhum usuÃ¡rio logado.</div>";
     return;
   }
 
@@ -697,6 +764,21 @@ function stopPresenceTracking() {
   }
 }
 
+function resetDashboardState() {
+  intervals.forEach((interval) => clearInterval(interval));
+  intervals = [];
+  activeTimers = {};
+  stopAlarm();
+
+  const timersContainer = document.getElementById("timers");
+  if (timersContainer) {
+    timersContainer.innerHTML = "";
+  }
+
+  document.getElementById("bigTimer").textContent = "00:00";
+  document.getElementById("bigLabel").textContent = "No Timer Running";
+}
+
 function markUserOnline(user) {
   if (!user?.email || !user?.uid) return;
 
@@ -710,7 +792,7 @@ function markUserOnline(user) {
 
   presenceUnsubscribe = onValue(connectedRef, (snap) => {
     if (snap.val() !== true) {
-      console.log("Cliente ainda não conectado ao Realtime Database.");
+      console.log("Cliente ainda nÃ£o conectado ao Realtime Database.");
       return;
     }
 
@@ -730,7 +812,7 @@ function markUserOnline(user) {
       loginAt: serverTimestamp()
     })
       .then(() => {
-        console.log("Usuário marcado online:", username);
+        console.log("UsuÃ¡rio marcado online:", username);
       })
       .catch((error) => {
         console.error("Erro ao gravar onlineUsers:", error);
@@ -743,10 +825,10 @@ function markUserOffline() {
 
   set(ref(db, "onlineUsers/" + currentUserId), null)
     .then(() => {
-      console.log("Usuário removido de onlineUsers:", currentUserId);
+      console.log("UsuÃ¡rio removido de onlineUsers:", currentUserId);
     })
     .catch((error) => {
-      console.error("Erro ao remover usuário de onlineUsers:", error);
+      console.error("Erro ao remover usuÃ¡rio de onlineUsers:", error);
     });
 
   currentUserId = null;
@@ -778,11 +860,20 @@ document.addEventListener("click", (e) => {
 });
 
 /* =========================
-AUTH & LOGIN (MODO USUÁRIO)
+AUTH & LOGIN (MODO USUÃRIO)
 ========================= */
 
 const loginScreen = document.getElementById("loginScreen");
 const btnLogin = document.getElementById("btnLogin");
+const logoutBtn = document.getElementById("logoutBtn");
+
+if (logoutBtn) {
+  logoutBtn.onclick = () => {
+    signOut(auth).catch((error) => {
+      console.error("Erro ao deslogar:", error);
+    });
+  };
+}
 
 btnLogin.onclick = () => {
   const userField = document.getElementById("loginUser").value.trim();
@@ -801,14 +892,16 @@ btnLogin.onclick = () => {
       errorMsg.textContent = "";
     })
     .catch((error) => {
-      errorMsg.textContent = "Usuário ou senha inválidos.";
+      errorMsg.textContent = "UsuÃ¡rio ou senha invÃ¡lidos.";
       console.error("Erro de login:", error.code);
     });
 };
 
 onAuthStateChanged(auth, (user) => {
   if (user) {
+    cleanupRealtimeListeners();
     loginScreen.classList.remove("active");
+    logoutBtn?.classList.remove("hidden");
     loadBosses();
     loadConfig();
 
@@ -823,11 +916,12 @@ onAuthStateChanged(auth, (user) => {
       stopWatchingOnlineUsers();
     }
   } else {
+    cleanupRealtimeListeners();
+    resetDashboardState();
     loginScreen.classList.add("active");
+    logoutBtn?.classList.add("hidden");
     adminUsersBtn?.classList.add("hidden");
     closeAdminUsersPanel();
-    stopWatchingOnlineUsers();
-    stopPresenceTracking();
     markUserOffline();
   }
 });
@@ -835,3 +929,5 @@ onAuthStateChanged(auth, (user) => {
 window.addEventListener("beforeunload", () => {
   markUserOffline();
 });
+
+
