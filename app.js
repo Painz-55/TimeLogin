@@ -60,9 +60,13 @@ let config = {
 
 let intervals = [];
 let activeTimers = {};
+let timerDataCache = {};
 let timerListeners = [];
+let finishedBlinkTimeouts = {};
 let unsubscribeBosses = null;
 let unsubscribeConfig = null;
+
+const FINISHED_BLINK_MS = 20000;
 
 function getTimerBoss(i) {
   const bossId = config.timers[i]?.bossId ?? 0;
@@ -80,6 +84,50 @@ function isAlarmEnabled(i) {
   } catch (e) {
     return true;
   }
+}
+
+function getTimerFinishedAt(data) {
+  if (!data || typeof data.start !== "number" || typeof data.tempo !== "number") {
+    return null;
+  }
+
+  return data.start + data.tempo * 1000;
+}
+
+function formatDuration(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(safeSeconds / 3600);
+  const m = Math.floor((safeSeconds % 3600) / 60);
+  const s = safeSeconds % 60;
+
+  if (h > 0) {
+    return [
+      String(h).padStart(2, "0"),
+      String(m).padStart(2, "0"),
+      String(s).padStart(2, "0")
+    ].join(":");
+  }
+
+  return [
+    String(m).padStart(2, "0"),
+    String(s).padStart(2, "0")
+  ].join(":");
+}
+
+function clearFinishedBlink(i) {
+  if (finishedBlinkTimeouts[i]) {
+    clearTimeout(finishedBlinkTimeouts[i]);
+    delete finishedBlinkTimeouts[i];
+  }
+
+  document.querySelectorAll(".timer")[i]?.classList.remove("finished");
+}
+
+function setKillReport(i, seconds, bossName) {
+  const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
+  if (!label) return;
+
+  label.textContent = `Tempo ate reiniciar ${bossName}: ${formatDuration(seconds)}`;
 }
 
 function stopAllTimerListeners() {
@@ -247,6 +295,45 @@ function saveConfig() {
   set(ref(db, "config/bosses"), config.bosses);
 }
 
+function recordTimerRestartDelay(i) {
+  const user = auth.currentUser;
+  const data = timerDataCache[i];
+  const finishedAt = getTimerFinishedAt(data);
+  const now = serverNow();
+
+  if (!user || !finishedAt || now < finishedAt) {
+    return;
+  }
+
+  const bossId = data.bossId ?? config.timers[i]?.bossId ?? 0;
+  const boss = config.bosses[bossId] || getTimerBoss(i);
+  const bossName = data.bossName || boss?.nome || "Boss";
+  const username = user.email?.split("@")[0].toLowerCase() || user.uid;
+  const delaySeconds = Math.floor((now - finishedAt) / 1000);
+  const historyKey = String(Math.round(now));
+
+  const record = {
+    uid: user.uid,
+    username,
+    email: user.email || "",
+    bossId,
+    bossName,
+    timerIndex: i,
+    finishedAt,
+    restartedAt: serverTimestamp(),
+    delaySeconds
+  };
+
+  Promise.all([
+    set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
+    set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record)
+  ]).catch((error) => {
+    console.error("Erro ao salvar tempo de reinicio:", error);
+  });
+
+  setKillReport(i, delaySeconds, bossName);
+}
+
 /* =========================
 CREATE TIMERS UI
 ========================= */
@@ -330,7 +417,10 @@ function createTimers() {
 
     btn.onclick = () => toggleTimer(i);
 
-    div.append(select, label, progress, alarmBtn, btn);
+    let killLabel = document.createElement("div");
+    killLabel.className = "killLabel";
+
+    div.append(select, label, progress, alarmBtn, btn, killLabel);
     container.appendChild(div);
   });
 }
@@ -369,6 +459,7 @@ START / STOP
 
 function toggleTimer(i) {
   stopAlarm();
+  clearFinishedBlink(i);
 
   let timerDiv = document.querySelectorAll(".timer")[i];
 
@@ -391,11 +482,16 @@ function startTimer(i) {
   const boss = getTimerBoss(i);
   if (!boss) return;
 
+  recordTimerRestartDelay(i);
+
+  const bossId = config.timers[i]?.bossId ?? 0;
   let total = boss.tempo * 60;
 
   set(ref(db, "timers/" + i), {
     start: serverTimestamp(),
-    tempo: total
+    tempo: total,
+    bossId,
+    bossName: boss.nome
   });
 }
 
@@ -408,6 +504,8 @@ function stopTimer(i) {
   intervals[i] = null;
 
   delete activeTimers[i];
+  delete timerDataCache[i];
+  clearFinishedBlink(i);
 
   updateBigTimer();
 
@@ -453,9 +551,10 @@ function syncTimers() {
         intervals[i] = null;
 
         delete activeTimers[i];
+        delete timerDataCache[i];
         updateBigTimer();
 
-        timerDiv?.classList.remove("finished");
+        clearFinishedBlink(i);
         label.textContent = "00:00";
         bar.style.width = "0%";
         btn.textContent = "Start";
@@ -463,6 +562,7 @@ function syncTimers() {
         return;
       }
 
+      timerDataCache[i] = data;
       runTimer(i, data);
     });
 
@@ -479,7 +579,8 @@ function runTimer(i, data) {
   let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
   let bar = document.querySelectorAll(".timer")[i]?.querySelector(".bar");
   let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
-  const boss = getTimerBoss(i);
+  const bossId = data.bossId ?? config.timers[i]?.bossId ?? 0;
+  const boss = config.bosses[bossId] || getTimerBoss(i);
 
   if (!label || !bar || !btn || !boss) return;
 
@@ -516,7 +617,7 @@ function runTimer(i, data) {
     if (remaining <= 0) {
       remaining = 0;
       label.textContent = "00:00";
-      triggerTimerFinished(i);
+      triggerTimerFinished(i, data);
     }
   }, 1000);
 }
@@ -525,7 +626,7 @@ function runTimer(i, data) {
 TIMER FINISHED
 ========================= */
 
-function triggerTimerFinished(i) {
+function triggerTimerFinished(i, data) {
   clearInterval(intervals[i]);
   intervals[i] = null;
 
@@ -536,8 +637,19 @@ function triggerTimerFinished(i) {
   let label = document.querySelectorAll(".timer")[i]?.querySelector(".timeLabel");
   let btn = document.querySelectorAll(".timer")[i]?.querySelector(".startBtn");
 
-  if (timerDiv) {
+  const finishedAt = getTimerFinishedAt(data);
+  const blinkRemaining = finishedAt
+    ? FINISHED_BLINK_MS - (serverNow() - finishedAt)
+    : FINISHED_BLINK_MS;
+
+  clearFinishedBlink(i);
+
+  if (timerDiv && blinkRemaining > 0) {
     timerDiv.classList.add("finished");
+    finishedBlinkTimeouts[i] = setTimeout(() => {
+      timerDiv.classList.remove("finished");
+      delete finishedBlinkTimeouts[i];
+    }, blinkRemaining);
   }
 
   if (label) {
@@ -548,7 +660,7 @@ function triggerTimerFinished(i) {
     btn.textContent = "Start";
   }
 
-  if (isAlarmEnabled(i)) {
+  if (isAlarmEnabled(i) && blinkRemaining > 0) {
     playAlarm();
   }
 }
@@ -766,8 +878,11 @@ function stopPresenceTracking() {
 
 function resetDashboardState() {
   intervals.forEach((interval) => clearInterval(interval));
+  Object.keys(finishedBlinkTimeouts).forEach((key) => clearTimeout(finishedBlinkTimeouts[key]));
   intervals = [];
   activeTimers = {};
+  timerDataCache = {};
+  finishedBlinkTimeouts = {};
   stopAlarm();
 
   const timersContainer = document.getElementById("timers");
@@ -929,5 +1044,3 @@ onAuthStateChanged(auth, (user) => {
 window.addEventListener("beforeunload", () => {
   markUserOffline();
 });
-
-
