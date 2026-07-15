@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getDatabase,
   ref,
+  get,
   set,
   onValue,
   serverTimestamp,
@@ -68,6 +69,7 @@ let unsubscribeBosses = null;
 let unsubscribeConfig = null;
 
 const FINISHED_BLINK_MS = 10000;
+const MIN_KILL_TIME_SECONDS = 30;
 
 function getTimerBoss(i) {
   const bossId = config.timers[i]?.bossId ?? 0;
@@ -124,11 +126,16 @@ function clearFinishedBlink(i) {
   document.querySelectorAll(".timer")[i]?.classList.remove("finished");
 }
 
-function setKillReport(i, seconds, bossName) {
+function setKillReport(i, seconds, bossName, recordSeconds) {
   const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
   if (!label) return;
 
-  label.textContent = `O tempo para matar o ${bossName} foi de: ${formatDuration(seconds)}`;
+  const recordText = typeof recordSeconds === "number"
+    ? formatDuration(recordSeconds)
+    : "--:--";
+
+  label.textContent =
+    `Voce demorou ${formatDuration(seconds)} para matar o ${bossName}. O Record \u00e9 de: ${recordText}`;
 }
 
 function stopAllTimerListeners() {
@@ -205,7 +212,16 @@ function renderBossConfig() {
       updateBossDropdowns();
     };
 
-    row.append(nome, tempo, del);
+    let clearRecord = document.createElement("button");
+    clearRecord.className = "clearRecord";
+    clearRecord.textContent = "Limpar Record";
+
+    clearRecord.onclick = (e) => {
+      e.stopPropagation();
+      clearBossRecord(i);
+    };
+
+    row.append(nome, tempo, clearRecord, del);
     div.appendChild(row);
   });
 }
@@ -301,7 +317,27 @@ function saveConfig() {
   set(ref(db, "config/bosses"), config.bosses);
 }
 
-function recordTimerRestartDelay(i) {
+function clearBossRecord(bossId) {
+  const updates = [
+    set(ref(db, "bossRecords/" + bossId), null)
+  ];
+
+  config.timers.forEach((timer, timerIndex) => {
+    if ((timer?.bossId ?? 0) === bossId) {
+      updates.push(set(ref(db, "timerReports/" + timerIndex), {
+        bossId,
+        cleared: true,
+        clearedAt: serverTimestamp()
+      }));
+    }
+  });
+
+  Promise.all(updates).catch((error) => {
+    console.error("Erro ao limpar record do boss:", error);
+  });
+}
+
+async function recordTimerRestartDelay(i) {
   const user = auth.currentUser;
   const data = timerDataCache[i];
   const finishedAt = getTimerFinishedAt(data);
@@ -318,6 +354,10 @@ function recordTimerRestartDelay(i) {
   const delaySeconds = Math.floor((now - finishedAt) / 1000);
   const historyKey = String(Math.round(now));
 
+  if (delaySeconds <= MIN_KILL_TIME_SECONDS) {
+    return;
+  }
+
   const record = {
     uid: user.uid,
     username,
@@ -330,13 +370,29 @@ function recordTimerRestartDelay(i) {
     delaySeconds
   };
 
-  Promise.all([
-    set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
-    set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record),
-    set(ref(db, "timerReports/" + i), record)
-  ]).catch((error) => {
+  try {
+    const recordRef = ref(db, "bossRecords/" + bossId);
+    const recordSnapshot = await get(recordRef);
+    const currentRecord = recordSnapshot.val();
+    const isNewRecord =
+      !currentRecord ||
+      typeof currentRecord.delaySeconds !== "number" ||
+      delaySeconds < currentRecord.delaySeconds;
+    const bossRecord = isNewRecord ? record : currentRecord;
+    const report = {
+      ...record,
+      recordSeconds: bossRecord.delaySeconds
+    };
+
+    await Promise.all([
+      set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
+      set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record),
+      set(ref(db, "timerReports/" + i), report),
+      isNewRecord ? set(recordRef, record) : Promise.resolve()
+    ]);
+  } catch (error) {
     console.error("Erro ao salvar tempo de reinicio:", error);
-  });
+  }
 }
 
 /* =========================
@@ -578,11 +634,24 @@ function syncTimers() {
       if (!label) return;
 
       if (!report) {
+        return;
+      }
+
+      if (report.cleared === true) {
         label.textContent = "";
         return;
       }
 
-      setKillReport(i, report.delaySeconds || 0, report.bossName || "boss");
+      if (typeof report.delaySeconds !== "number") {
+        return;
+      }
+
+      setKillReport(
+        i,
+        report.delaySeconds,
+        report.bossName || "boss",
+        report.recordSeconds ?? report.delaySeconds
+      );
     });
 
     reportListeners.push(unsubscribeReport);
