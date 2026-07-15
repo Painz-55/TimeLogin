@@ -156,6 +156,13 @@ function renderKillReport(i, report, record) {
   );
 }
 
+function setKillReportError(i, message) {
+  const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
+  if (!label) return;
+
+  label.textContent = message;
+}
+
 function stopAllTimerListeners() {
   timerListeners.forEach((unsub) => {
     if (unsub) unsub();
@@ -337,7 +344,7 @@ function saveConfig() {
 
 function clearBossRecord(bossId) {
   const updates = [
-    set(ref(db, "bossRecords/" + bossId), null)
+    set(ref(db, "config/bossRecords/" + bossId), null)
   ];
 
   Promise.all(updates).catch((error) => {
@@ -379,7 +386,7 @@ async function recordTimerRestartDelay(i) {
   };
 
   try {
-    const recordRef = ref(db, "bossRecords/" + bossId);
+    const recordRef = ref(db, "config/bossRecords/" + bossId);
     const recordSnapshot = await get(recordRef);
     const currentRecord = recordSnapshot.val();
     const isNewRecord =
@@ -388,13 +395,19 @@ async function recordTimerRestartDelay(i) {
       delaySeconds < currentRecord.delaySeconds;
     const bossRecord = isNewRecord ? record : currentRecord;
     await Promise.all([
-      set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
-      set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record),
-      set(ref(db, "lastKillReports/" + bossId), record),
+      set(ref(db, "config/lastKillReports/" + bossId), record),
       isNewRecord ? set(recordRef, record) : Promise.resolve()
     ]);
+
+    Promise.all([
+      set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
+      set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record)
+    ]).catch((historyError) => {
+      console.warn("Historico opcional nao foi salvo:", historyError);
+    });
   } catch (error) {
     console.error("Erro ao salvar tempo de reinicio:", error);
+    setKillReportError(i, "Nao foi possivel salvar o tempo. Verifique as regras do Firebase.");
   }
 }
 
@@ -542,11 +555,11 @@ function toggleTimer(i) {
 START TIMER
 ========================= */
 
-function startTimer(i) {
+async function startTimer(i) {
   const boss = getTimerBoss(i);
   if (!boss) return;
 
-  recordTimerRestartDelay(i);
+  await recordTimerRestartDelay(i);
 
   const bossId = config.timers[i]?.bossId ?? 0;
   let total = boss.tempo * 60;
@@ -629,8 +642,8 @@ function syncTimers() {
     timerListeners.push(unsubscribe);
 
     const bossId = config.timers[i]?.bossId ?? 0;
-    const lastReportRef = ref(db, "lastKillReports/" + bossId);
-    const recordRef = ref(db, "bossRecords/" + bossId);
+    const lastReportRef = ref(db, "config/lastKillReports/" + bossId);
+    const recordRef = ref(db, "config/bossRecords/" + bossId);
     let lastReport = null;
     let bossRecord = null;
 
