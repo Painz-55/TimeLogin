@@ -300,13 +300,19 @@ input {
 
 .bossRow {
   display: grid;
-  grid-template-columns: 1fr 90px 48px;
+  grid-template-columns: 1fr 90px 130px 48px;
   gap: 10px;
   margin-bottom: 10px;
 }
 
 .deleteBoss {
   background: rgba(255, 95, 95, 0.12);
+  box-shadow: none;
+}
+
+.clearRecord {
+  padding-inline: 10px;
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: none;
 }
 
