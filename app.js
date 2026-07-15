@@ -62,11 +62,12 @@ let intervals = [];
 let activeTimers = {};
 let timerDataCache = {};
 let timerListeners = [];
+let reportListeners = [];
 let finishedBlinkTimeouts = {};
 let unsubscribeBosses = null;
 let unsubscribeConfig = null;
 
-const FINISHED_BLINK_MS = 20000;
+const FINISHED_BLINK_MS = 10000;
 
 function getTimerBoss(i) {
   const bossId = config.timers[i]?.bossId ?? 0;
@@ -127,7 +128,7 @@ function setKillReport(i, seconds, bossName) {
   const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
   if (!label) return;
 
-  label.textContent = `Tempo ate reiniciar ${bossName}: ${formatDuration(seconds)}`;
+  label.textContent = `O tempo para matar o ${bossName} foi de: ${formatDuration(seconds)}`;
 }
 
 function stopAllTimerListeners() {
@@ -135,7 +136,12 @@ function stopAllTimerListeners() {
     if (unsub) unsub();
   });
 
+  reportListeners.forEach((unsub) => {
+    if (unsub) unsub();
+  });
+
   timerListeners = [];
+  reportListeners = [];
 }
 
 function cleanupRealtimeListeners() {
@@ -326,12 +332,11 @@ function recordTimerRestartDelay(i) {
 
   Promise.all([
     set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
-    set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record)
+    set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record),
+    set(ref(db, "timerReports/" + i), record)
   ]).catch((error) => {
     console.error("Erro ao salvar tempo de reinicio:", error);
   });
-
-  setKillReport(i, delaySeconds, bossName);
 }
 
 /* =========================
@@ -527,11 +532,7 @@ SYNC TIMERS
 ========================= */
 
 function syncTimers() {
-  timerListeners.forEach((unsub) => {
-    if (unsub) unsub();
-  });
-
-  timerListeners = [];
+  stopAllTimerListeners();
 
   config.timers.forEach((t, i) => {
     const timerRef = ref(db, "timers/" + i);
@@ -567,6 +568,24 @@ function syncTimers() {
     });
 
     timerListeners.push(unsubscribe);
+
+    const reportRef = ref(db, "timerReports/" + i);
+
+    const unsubscribeReport = onValue(reportRef, (snapshot) => {
+      const report = snapshot.val();
+      const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
+
+      if (!label) return;
+
+      if (!report) {
+        label.textContent = "";
+        return;
+      }
+
+      setKillReport(i, report.delaySeconds || 0, report.bossName || "boss");
+    });
+
+    reportListeners.push(unsubscribeReport);
   });
 }
 
