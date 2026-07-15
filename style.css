@@ -159,6 +159,14 @@ body::before {
   font-weight: 700;
 }
 
+.killLabel {
+  flex: 1 1 100%;
+  min-height: 18px;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .progress {
   position: relative;
   flex: 1 1 220px;
