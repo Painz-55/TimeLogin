@@ -131,11 +131,29 @@ function setKillReport(i, seconds, bossName, recordSeconds) {
   if (!label) return;
 
   const recordText = typeof recordSeconds === "number"
-    ? formatDuration(recordSeconds)
-    : "--:--";
+    ? `O Record \u00e9 de: ${formatDuration(recordSeconds)}`
+    : "N\u00e3o h\u00e1 records ainda";
 
   label.textContent =
-    `Voce demorou ${formatDuration(seconds)} para matar o ${bossName}. O Record \u00e9 de: ${recordText}`;
+    `Voce demorou ${formatDuration(seconds)} para matar o ${bossName}. ${recordText}`;
+}
+
+function renderKillReport(i, report, record) {
+  if (!report || typeof report.delaySeconds !== "number") {
+    return;
+  }
+
+  const recordSeconds =
+    record && typeof record.delaySeconds === "number"
+      ? record.delaySeconds
+      : null;
+
+  setKillReport(
+    i,
+    report.delaySeconds,
+    report.bossName || record?.bossName || "boss",
+    recordSeconds
+  );
 }
 
 function stopAllTimerListeners() {
@@ -322,16 +340,6 @@ function clearBossRecord(bossId) {
     set(ref(db, "bossRecords/" + bossId), null)
   ];
 
-  config.timers.forEach((timer, timerIndex) => {
-    if ((timer?.bossId ?? 0) === bossId) {
-      updates.push(set(ref(db, "timerReports/" + timerIndex), {
-        bossId,
-        cleared: true,
-        clearedAt: serverTimestamp()
-      }));
-    }
-  });
-
   Promise.all(updates).catch((error) => {
     console.error("Erro ao limpar record do boss:", error);
   });
@@ -379,15 +387,10 @@ async function recordTimerRestartDelay(i) {
       typeof currentRecord.delaySeconds !== "number" ||
       delaySeconds < currentRecord.delaySeconds;
     const bossRecord = isNewRecord ? record : currentRecord;
-    const report = {
-      ...record,
-      recordSeconds: bossRecord.delaySeconds
-    };
-
     await Promise.all([
       set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
       set(ref(db, "killTimeHistory/" + bossId + "/" + user.uid + "/" + historyKey), record),
-      set(ref(db, "timerReports/" + i), report),
+      set(ref(db, "lastKillReports/" + bossId), record),
       isNewRecord ? set(recordRef, record) : Promise.resolve()
     ]);
   } catch (error) {
@@ -625,36 +628,27 @@ function syncTimers() {
 
     timerListeners.push(unsubscribe);
 
-    const reportRef = ref(db, "timerReports/" + i);
+    const bossId = config.timers[i]?.bossId ?? 0;
+    const lastReportRef = ref(db, "lastKillReports/" + bossId);
+    const recordRef = ref(db, "bossRecords/" + bossId);
+    let lastReport = null;
+    let bossRecord = null;
 
-    const unsubscribeReport = onValue(reportRef, (snapshot) => {
-      const report = snapshot.val();
-      const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
+    const renderCurrentReport = () => {
+      renderKillReport(i, lastReport, bossRecord);
+    };
 
-      if (!label) return;
-
-      if (!report) {
-        return;
-      }
-
-      if (report.cleared === true) {
-        label.textContent = "";
-        return;
-      }
-
-      if (typeof report.delaySeconds !== "number") {
-        return;
-      }
-
-      setKillReport(
-        i,
-        report.delaySeconds,
-        report.bossName || "boss",
-        report.recordSeconds ?? report.delaySeconds
-      );
+    const unsubscribeLastReport = onValue(lastReportRef, (snapshot) => {
+      lastReport = snapshot.val();
+      renderCurrentReport();
     });
 
-    reportListeners.push(unsubscribeReport);
+    const unsubscribeRecord = onValue(recordRef, (snapshot) => {
+      bossRecord = snapshot.val();
+      renderCurrentReport();
+    });
+
+    reportListeners.push(unsubscribeLastReport, unsubscribeRecord);
   });
 }
 
