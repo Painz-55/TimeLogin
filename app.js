@@ -2,9 +2,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getDatabase,
   ref,
-  get,
   set,
   onValue,
+  runTransaction,
   serverTimestamp,
   onDisconnect
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -62,8 +62,8 @@ let config = {
 let intervals = [];
 let activeTimers = {};
 let timerDataCache = {};
+let timerReportFallbacks = {};
 let timerListeners = [];
-let reportListeners = [];
 let finishedBlinkTimeouts = {};
 let unsubscribeBosses = null;
 let unsubscribeConfig = null;
@@ -138,8 +138,31 @@ function setKillReport(i, seconds, bossName, recordSeconds) {
     `Voce demorou ${formatDuration(seconds)} para matar o ${bossName}. ${recordText}`;
 }
 
-function renderKillReport(i, report, record) {
+function setEmptyKillReport(i) {
+  const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
+  if (!label) return;
+
+  label.textContent = "nenhum valor registrado ainda.";
+}
+
+function renderKillReport(i) {
+  const bossId = config.timers[i]?.bossId ?? 0;
+  const boss = config.bosses[bossId];
+  const timerConfig = config.timers[i];
+  const timerConfigReport =
+    timerConfig?.lastKillReport?.bossId === bossId
+      ? timerConfig.lastKillReport
+      : null;
+  const timerConfigRecord =
+    timerConfig?.record?.bossId === bossId
+      ? timerConfig.record
+      : null;
+  const fallback = timerReportFallbacks[i];
+  const report = boss?.lastKillReport || timerConfigReport || fallback?.lastKillReport;
+  const record = boss?.record || timerConfigRecord || fallback?.record;
+
   if (!report || typeof report.delaySeconds !== "number") {
+    setEmptyKillReport(i);
     return;
   }
 
@@ -156,6 +179,37 @@ function renderKillReport(i, report, record) {
   );
 }
 
+function renderTimerPayloadKillReport(i, data) {
+  if (!data?.lastKillReport || typeof data.lastKillReport.delaySeconds !== "number") {
+    delete timerReportFallbacks[i];
+    renderKillReport(i);
+    return;
+  }
+
+  timerReportFallbacks[i] = {
+    lastKillReport: data.lastKillReport,
+    record: data.record || null
+  };
+
+  const recordSeconds =
+    data.record && typeof data.record.delaySeconds === "number"
+      ? data.record.delaySeconds
+      : null;
+
+  setKillReport(
+    i,
+    data.lastKillReport.delaySeconds,
+    data.lastKillReport.bossName || data.bossName || "boss",
+    recordSeconds
+  );
+}
+
+function renderAllKillReports() {
+  config.timers.forEach((t, i) => {
+    renderKillReport(i);
+  });
+}
+
 function setKillReportError(i, message) {
   const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
   if (!label) return;
@@ -168,12 +222,7 @@ function stopAllTimerListeners() {
     if (unsub) unsub();
   });
 
-  reportListeners.forEach((unsub) => {
-    if (unsub) unsub();
-  });
-
   timerListeners = [];
-  reportListeners = [];
 }
 
 function cleanupRealtimeListeners() {
@@ -300,6 +349,7 @@ function loadBosses() {
 
     updateBossDropdowns();
     renderBossConfig();
+    renderAllKillReports();
   });
 }
 
@@ -327,6 +377,7 @@ function loadConfig() {
 
     createTimers();
     syncTimers();
+    renderAllKillReports();
   });
 }
 
@@ -344,11 +395,50 @@ function saveConfig() {
 
 function clearBossRecord(bossId) {
   const updates = [
-    set(ref(db, "config/bossRecords/" + bossId), null)
+    set(ref(db, "config/bosses/" + bossId + "/record"), null)
   ];
 
-  Promise.all(updates).catch((error) => {
-    console.error("Erro ao limpar record do boss:", error);
+  config.timers.forEach((timer, timerIndex) => {
+    if ((timer?.bossId ?? 0) === bossId) {
+      updates.push(set(ref(db, "config/timers/" + timerIndex + "/record"), null));
+    }
+  });
+
+  Promise.all(updates)
+    .then(() => {
+      if (config.bosses[bossId]) {
+        config.bosses[bossId].record = null;
+      }
+
+      config.timers.forEach((timer) => {
+        if ((timer?.bossId ?? 0) === bossId) {
+          timer.record = null;
+        }
+      });
+
+      renderAllKillReports();
+    })
+    .catch((error) => {
+      console.error("Erro ao limpar record do boss:", error);
+    });
+}
+
+function saveTimerConfigKillFallback(i, report, record) {
+  if (!config.timers[i]) {
+    return Promise.resolve();
+  }
+
+  config.timers[i] = {
+    ...config.timers[i],
+    lastKillReport: report,
+    record
+  };
+
+  return Promise.all([
+    set(ref(db, "config/timers/" + i + "/lastKillReport"), report),
+    set(ref(db, "config/timers/" + i + "/record"), record)
+  ]).catch((error) => {
+    console.warn("Fallback em config/timers nao foi salvo:", error);
   });
 }
 
@@ -370,7 +460,7 @@ async function recordTimerRestartDelay(i) {
   const historyKey = String(Math.round(now));
 
   if (delaySeconds <= MIN_KILL_TIME_SECONDS) {
-    return;
+    return null;
   }
 
   const record = {
@@ -384,20 +474,38 @@ async function recordTimerRestartDelay(i) {
     restartedAt: serverTimestamp(),
     delaySeconds
   };
+  const localRecord = config.bosses[bossId]?.record || null;
+  const fallbackRecord =
+    localRecord &&
+    typeof localRecord.delaySeconds === "number" &&
+    localRecord.delaySeconds <= delaySeconds
+      ? localRecord
+      : record;
 
   try {
-    const recordRef = ref(db, "config/bossRecords/" + bossId);
-    const recordSnapshot = await get(recordRef);
-    const currentRecord = recordSnapshot.val();
-    const isNewRecord =
-      !currentRecord ||
-      typeof currentRecord.delaySeconds !== "number" ||
-      delaySeconds < currentRecord.delaySeconds;
-    const bossRecord = isNewRecord ? record : currentRecord;
-    await Promise.all([
-      set(ref(db, "config/lastKillReports/" + bossId), record),
-      isNewRecord ? set(recordRef, record) : Promise.resolve()
-    ]);
+    const recordRef = ref(db, "config/bosses/" + bossId + "/record");
+    const recordResult = await runTransaction(recordRef, (currentRecord) => {
+      if (
+        !currentRecord ||
+        typeof currentRecord.delaySeconds !== "number" ||
+        delaySeconds < currentRecord.delaySeconds
+      ) {
+        return record;
+      }
+
+      return currentRecord;
+    });
+    const bossRecord = recordResult.snapshot.val();
+
+    await set(ref(db, "config/bosses/" + bossId + "/lastKillReport"), record);
+
+    config.bosses[bossId] = {
+      ...config.bosses[bossId],
+      lastKillReport: record,
+      record: bossRecord
+    };
+    await saveTimerConfigKillFallback(i, record, bossRecord);
+    renderAllKillReports();
 
     Promise.all([
       set(ref(db, "killTimes/" + bossId + "/" + user.uid), record),
@@ -405,9 +513,21 @@ async function recordTimerRestartDelay(i) {
     ]).catch((historyError) => {
       console.warn("Historico opcional nao foi salvo:", historyError);
     });
+
+    return {
+      report: record,
+      record: bossRecord
+    };
   } catch (error) {
     console.error("Erro ao salvar tempo de reinicio:", error);
     setKillReportError(i, "Nao foi possivel salvar o tempo. Verifique as regras do Firebase.");
+    await saveTimerConfigKillFallback(i, record, fallbackRecord);
+    renderAllKillReports();
+
+    return {
+      report: record,
+      record: fallbackRecord
+    };
   }
 }
 
@@ -438,6 +558,7 @@ function createTimers() {
       config.timers[i].bossId = parseInt(select.value);
       saveGlobal();
       updateIcon();
+      renderKillReport(i);
     };
 
     let label = document.createElement("span");
@@ -496,6 +617,7 @@ function createTimers() {
 
     let killLabel = document.createElement("div");
     killLabel.className = "killLabel";
+    killLabel.textContent = "nenhum valor registrado ainda.";
 
     div.append(select, label, progress, alarmBtn, btn, killLabel);
     container.appendChild(div);
@@ -559,16 +681,34 @@ async function startTimer(i) {
   const boss = getTimerBoss(i);
   if (!boss) return;
 
-  await recordTimerRestartDelay(i);
+  const killResult = await recordTimerRestartDelay(i);
 
   const bossId = config.timers[i]?.bossId ?? 0;
   let total = boss.tempo * 60;
-
-  set(ref(db, "timers/" + i), {
+  const timerPayload = {
     start: serverTimestamp(),
     tempo: total,
     bossId,
     bossName: boss.nome
+  };
+
+  if (killResult?.report) {
+    timerPayload.lastKillReport = killResult.report;
+    timerPayload.record = killResult.record;
+  }
+
+  set(ref(db, "timers/" + i), timerPayload).catch((error) => {
+    console.error("Erro ao iniciar timer com dados de kill:", error);
+
+    set(ref(db, "timers/" + i), {
+      start: serverTimestamp(),
+      tempo: total,
+      bossId,
+      bossName: boss.nome
+    }).catch((fallbackError) => {
+      console.error("Erro ao iniciar timer:", fallbackError);
+      setKillReportError(i, "Nao foi possivel iniciar/salvar o timer. Verifique as regras do Firebase.");
+    });
   });
 }
 
@@ -582,6 +722,7 @@ function stopTimer(i) {
 
   delete activeTimers[i];
   delete timerDataCache[i];
+  delete timerReportFallbacks[i];
   clearFinishedBlink(i);
 
   updateBigTimer();
@@ -625,43 +766,24 @@ function syncTimers() {
 
         delete activeTimers[i];
         delete timerDataCache[i];
+        delete timerReportFallbacks[i];
         updateBigTimer();
 
         clearFinishedBlink(i);
         label.textContent = "00:00";
         bar.style.width = "0%";
         btn.textContent = "Start";
+        renderKillReport(i);
 
         return;
       }
 
       timerDataCache[i] = data;
+      renderTimerPayloadKillReport(i, data);
       runTimer(i, data);
     });
 
     timerListeners.push(unsubscribe);
-
-    const bossId = config.timers[i]?.bossId ?? 0;
-    const lastReportRef = ref(db, "config/lastKillReports/" + bossId);
-    const recordRef = ref(db, "config/bossRecords/" + bossId);
-    let lastReport = null;
-    let bossRecord = null;
-
-    const renderCurrentReport = () => {
-      renderKillReport(i, lastReport, bossRecord);
-    };
-
-    const unsubscribeLastReport = onValue(lastReportRef, (snapshot) => {
-      lastReport = snapshot.val();
-      renderCurrentReport();
-    });
-
-    const unsubscribeRecord = onValue(recordRef, (snapshot) => {
-      bossRecord = snapshot.val();
-      renderCurrentReport();
-    });
-
-    reportListeners.push(unsubscribeLastReport, unsubscribeRecord);
   });
 }
 
@@ -977,6 +1099,7 @@ function resetDashboardState() {
   intervals = [];
   activeTimers = {};
   timerDataCache = {};
+  timerReportFallbacks = {};
   finishedBlinkTimeouts = {};
   stopAlarm();
 
