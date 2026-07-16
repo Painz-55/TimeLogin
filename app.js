@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getDatabase,
   ref,
+  get,
   set,
   onValue,
   runTransaction,
@@ -62,6 +63,7 @@ let config = {
 let intervals = [];
 let activeTimers = {};
 let timerDataCache = {};
+let finishedTimerCache = {};
 let timerReportFallbacks = {};
 let timerListeners = [];
 let finishedBlinkTimeouts = {};
@@ -138,6 +140,38 @@ function setKillReport(i, seconds, bossName, recordSeconds) {
     `Voce demorou ${formatDuration(seconds)} para matar o ${bossName}. ${recordText}`;
 }
 
+function getKillReportTime(report) {
+  if (!report || typeof report.delaySeconds !== "number") {
+    return -Infinity;
+  }
+
+  if (typeof report.restartedAtMs === "number") {
+    return report.restartedAtMs;
+  }
+
+  if (typeof report.restartedAt === "number") {
+    return report.restartedAt;
+  }
+
+  if (typeof report.finishedAt === "number") {
+    return report.finishedAt + report.delaySeconds * 1000;
+  }
+
+  return 0;
+}
+
+function pickLatestKillReport(reports) {
+  return reports
+    .filter((report) => report && typeof report.delaySeconds === "number")
+    .sort((a, b) => getKillReportTime(b) - getKillReportTime(a))[0] || null;
+}
+
+function pickBestRecord(records) {
+  return records
+    .filter((record) => record && typeof record.delaySeconds === "number")
+    .sort((a, b) => a.delaySeconds - b.delaySeconds)[0] || null;
+}
+
 function setEmptyKillReport(i) {
   const label = document.querySelectorAll(".timer")[i]?.querySelector(".killLabel");
   if (!label) return;
@@ -158,8 +192,16 @@ function renderKillReport(i) {
       ? timerConfig.record
       : null;
   const fallback = timerReportFallbacks[i];
-  const report = boss?.lastKillReport || timerConfigReport || fallback?.lastKillReport;
-  const record = boss?.record || timerConfigRecord || fallback?.record;
+  const report = pickLatestKillReport([
+    boss?.lastKillReport,
+    timerConfigReport,
+    fallback?.lastKillReport
+  ]);
+  const record = pickBestRecord([
+    boss?.record,
+    timerConfigRecord,
+    fallback?.record
+  ]);
 
   if (!report || typeof report.delaySeconds !== "number") {
     setEmptyKillReport(i);
@@ -442,13 +484,43 @@ function saveTimerConfigKillFallback(i, report, record) {
   });
 }
 
-async function recordTimerRestartDelay(i) {
+async function loadPreviousTimerData(i) {
+  const candidates = [
+    timerDataCache[i],
+    finishedTimerCache[i]
+  ];
+
+  try {
+    const snapshot = await get(ref(db, "timers/" + i));
+    const data = snapshot.val();
+
+    if (data) {
+      timerDataCache[i] = data;
+      candidates.push(data);
+    }
+  } catch (error) {
+    console.warn("Nao foi possivel buscar timer anterior antes de reiniciar:", error);
+  }
+
+  return candidates
+    .filter((data) => getTimerFinishedAt(data) !== null)
+    .sort((a, b) => getTimerFinishedAt(b) - getTimerFinishedAt(a))[0] || null;
+}
+
+async function recordTimerRestartDelay(i, previousTimerData) {
   const user = auth.currentUser;
-  const data = timerDataCache[i];
+  const data = previousTimerData || timerDataCache[i] || finishedTimerCache[i];
   const finishedAt = getTimerFinishedAt(data);
   const now = serverNow();
 
   if (!user || !finishedAt || now < finishedAt) {
+    console.warn("Registro ignorado: timer anterior ausente, usuario deslogado ou timer ainda nao acabou.", {
+      timerIndex: i,
+      hasUser: Boolean(user),
+      data,
+      finishedAt,
+      now
+    });
     return;
   }
 
@@ -460,6 +532,11 @@ async function recordTimerRestartDelay(i) {
   const historyKey = String(Math.round(now));
 
   if (delaySeconds <= MIN_KILL_TIME_SECONDS) {
+    console.warn("Registro ignorado: tempo menor ou igual ao minimo.", {
+      timerIndex: i,
+      delaySeconds,
+      minimo: MIN_KILL_TIME_SECONDS
+    });
     return null;
   }
 
@@ -471,6 +548,7 @@ async function recordTimerRestartDelay(i) {
     bossName,
     timerIndex: i,
     finishedAt,
+    restartedAtMs: now,
     restartedAt: serverTimestamp(),
     delaySeconds
   };
@@ -681,7 +759,13 @@ async function startTimer(i) {
   const boss = getTimerBoss(i);
   if (!boss) return;
 
-  const killResult = await recordTimerRestartDelay(i);
+  const previousTimerData = await loadPreviousTimerData(i);
+
+  if (previousTimerData) {
+    timerDataCache[i] = previousTimerData;
+  }
+
+  const killResult = await recordTimerRestartDelay(i, previousTimerData);
 
   const bossId = config.timers[i]?.bossId ?? 0;
   let total = boss.tempo * 60;
@@ -722,6 +806,7 @@ function stopTimer(i) {
 
   delete activeTimers[i];
   delete timerDataCache[i];
+  delete finishedTimerCache[i];
   delete timerReportFallbacks[i];
   clearFinishedBlink(i);
 
@@ -766,6 +851,7 @@ function syncTimers() {
 
         delete activeTimers[i];
         delete timerDataCache[i];
+        delete finishedTimerCache[i];
         delete timerReportFallbacks[i];
         updateBigTimer();
 
@@ -848,6 +934,7 @@ function triggerTimerFinished(i, data) {
   intervals[i] = null;
 
   delete activeTimers[i];
+  finishedTimerCache[i] = data;
   updateBigTimer();
 
   let timerDiv = document.querySelectorAll(".timer")[i];
@@ -1099,6 +1186,7 @@ function resetDashboardState() {
   intervals = [];
   activeTimers = {};
   timerDataCache = {};
+  finishedTimerCache = {};
   timerReportFallbacks = {};
   finishedBlinkTimeouts = {};
   stopAlarm();
